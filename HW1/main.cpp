@@ -30,6 +30,15 @@ public:
 		AST* right = createAST(input);
 		return new AST(line, right, left);
 	}
+    AST* getLeft() {
+        return this._left;
+    }
+    AST* getRight() {
+        return this._right;
+    }
+    string getValue() {
+        return this._value;
+    }
 };
 
 
@@ -47,14 +56,22 @@ public:
 
 void generatePCode(AST* ast, SymbolTable symbolTable) {
 	// TODO: go over AST and print code
+    
+    // first attempt - simply go over tree
+    // recursive tree
+    AST* currNode = ast;
+    
+    while(ast != null) {
+        std::cout << ast.getValue() << " ";
+        ast = ast.getRight();
+    }
 }
-
 
 int main()
 {
 	AST* ast;
 	SymbolTable symbolTable;
-	ifstream myfile("write here your file path");
+	ifstream myfile("SamplesTxt\tree1.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
