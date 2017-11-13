@@ -1,0 +1,15 @@
+ldc 5
+ldc 5.000000
+sto
+ldc 7
+ldc 5
+ind
+ldc 6.000000
+les
+sto
+ldc 7
+ind
+fjp L0
+ldc 6
+print
+L0:

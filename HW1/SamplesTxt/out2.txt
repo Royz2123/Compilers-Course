@@ -1,0 +1,2 @@
+ldc 5
+print
