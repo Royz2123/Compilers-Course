@@ -3,6 +3,7 @@
 #include <fstream>
 
 using namespace std;
+using std::string;
 
 // Abstract Syntax Tree
 class AST
@@ -31,27 +32,109 @@ public:
 		return new AST(line, right, left);
 	}
     AST* getLeft() {
-        return this._left;
+        return this->_left;
     }
     AST* getRight() {
-        return this._right;
+        return this->_right;
     }
     string getValue() {
-        return this._value;
+        return this->_value;
     }
 };
 
+// Type of a variable
+enum Type {real, undefined};
 
+// Class Variable
 class Variable {
-	// Think! what does a Variable contain?
+	private:
+        Type type;
+        string name;
+        int address;
+        int size;
+    public:
+        Variable(Type type, string name, int address, int size){
+            this->type = type;
+            this->name = name;
+            this->address = address;
+            this->size = size;
+        }
+        Type getType() {
+            return this->type;
+        }
+        string getName() {
+            return this->name;
+        }
+        
 };
 
+
+// Class for SymbolTable
 class SymbolTable {
-	// Think! what does a SymbolTable contain?
+private:
+    std::vector<Variable> vars;
+    int currAddress;
+    
 public:
+    SymbolTable(std::vector<Variable> vars) {
+        this->vars = vars;
+    }
+
 	static SymbolTable generateSymbolTable(AST* tree) {
-		// TODO: create SymbolTable from AST
+        std::vector<Variable> vars = new std::vector<Variable>();
+        
+        // run recursive search on right side of tree
+        generateRecursiveTable(tree.getRight(), vars);
+    
+        // create SymbolTable and return
+        return SymbolTable(vars);
 	}
+    
+    static void generateRecursiveTable(AST* tree, std::vector<Variable>& vars) {
+        int size = 0;
+        
+        // check if reached a bottom node
+        if(tree == nullptr) {
+            return;
+        }
+        
+        // check if we reached a variable node
+        if(tree.getValue().equals("var")) {
+            string strType = tree.getLeft().getLeft().getValue();
+            Type type = SymbolTable.getType(strType);
+            
+            // need to push this->variable into the vars vector
+            vars.push_back(
+                Variable(
+                    type,                           // variable name
+                    tree.getRight().getValue()      // variable type
+                    address,                        // variable address
+                    SymbolTable.getSize(type)       // variable size
+                )
+            )
+            currAddress += size;
+        } else {
+            generateRecursiveTable(tree.getLeft());
+            generateRecursiveTable(tree.getRight());
+        }
+    }
+    static Type getType(string type) {
+        if (type == "real") {
+            return real;
+        } 
+        else {
+            return undefined;
+        }
+    }
+    static int getSize(Type type) {
+        int size = 0;
+        switch(type) {
+            case real   : size = 4;   break;
+            case green  : size = 1;   break;
+            default     : size = 0;   break; 
+        }
+        return size;
+    }
 };
 
 void generatePCode(AST* ast, SymbolTable symbolTable) {
