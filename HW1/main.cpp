@@ -128,9 +128,10 @@ public:
     }
     static int getSize(Type type) {
         int size = 0;
+        
+        // Add support for arrays later
         switch(type) {
-            case real   : size = 4;   break;
-            case green  : size = 1;   break;
+            case real   : size = 1;   break;
             default     : size = 0;   break; 
         }
         return size;
