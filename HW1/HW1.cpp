@@ -274,7 +274,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
     AST* ast;
-    ifstream myfile("tree5.txt");
+    ifstream myfile("samplesTxt\tree5.txt");
     if (myfile.is_open())
     {
         ast = AST::createAST(myfile);
