@@ -1,0 +1,18 @@
+program p;
+var
+    a : array[1..1] of real;
+    b : record
+        c : int;
+        d : ^b;
+        e : ^a;
+    end;
+    f : ^b;
+begin
+    b.c = 6;
+    f = b.c;
+    f^.d = 6;
+    f^.d^.e = 5;
+    a[1] = 2.5;
+    print f^.d^.e^[1] * 2.0
+end
+

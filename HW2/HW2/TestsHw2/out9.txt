@@ -1,0 +1,50 @@
+ldc 5
+inc 0
+ldc 1
+sto
+while_0:
+ldc 5
+inc 0
+ind
+ldc 20
+leq
+fjp while_out_1
+ldc 5
+inc 1
+inc 1
+inc 0
+ldc 5
+inc 0
+ind
+ixa 1
+dec 1
+ldc 5
+inc 0
+ind
+sto
+ldc 5
+inc 0
+ldc 5
+inc 0
+ind
+ldc 1
+add
+sto
+ujp while_0
+while_out_1:
+ldc 5
+inc 1
+inc 1
+inc 0
+ldc 5
+ixa 1
+dec 1
+ind
+inc 1
+inc 1
+inc 0
+ldc 5
+ixa 1
+dec 1
+ind
+print

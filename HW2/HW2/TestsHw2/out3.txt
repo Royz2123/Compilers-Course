@@ -1,0 +1,44 @@
+ldc 5
+ldc 10
+ixa 4
+ldc 7
+ixa 1
+dec 9
+ldc 12
+sto
+ldc 56
+ldc 10
+sto
+ldc 45
+ldc 17
+ixa 1
+dec 10
+ldc 7
+sto
+ldc 5
+ldc 6
+ixa 4
+ldc 7
+ixa 1
+dec 9
+ldc 5
+ldc 56
+ind
+ixa 4
+ldc 45
+ldc 17
+ixa 1
+dec 10
+ind
+ixa 1
+dec 9
+ind
+sto
+ldc 5
+ldc 6
+ixa 4
+ldc 7
+ixa 1
+dec 9
+ind
+print

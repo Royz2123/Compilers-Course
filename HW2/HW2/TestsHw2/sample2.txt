@@ -1,0 +1,15 @@
+program p;
+var
+   a : int;
+   b : ^a;
+begin
+    a = 10;
+    b = 5;
+    if false {
+        a = a+6
+    } else {
+        b^ = 10*a
+    };
+    print a
+end
+
