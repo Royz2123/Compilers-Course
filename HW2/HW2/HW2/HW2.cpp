@@ -6,7 +6,7 @@
 #include <algorithm>
 
 static int LAB = 0;
-static int CASE_SWITCH_LAB = 0;
+static int CASE_SWITCH_LAB = 1;
 static int END_SWITCH_LAB = 0;
 
 using namespace std;
@@ -132,7 +132,12 @@ public:
 			return;
 		stBuilder(tree->getLeft(), add);
 		if (tree->getRight()->getLeft()->getValue() == "pointer") {
-			st.push_back(Variable(tree->getRight()->getLeft()->getLeft()->getValue(), tree->getRight()->getRight()->getValue(), add, 1));
+			st.push_back(Variable(
+				tree->getRight()->getLeft()->getLeft()->getValue(), 
+				tree->getRight()->getRight()->getValue(), 
+				add, 
+				1
+			));
 			return;
 		}
 	}
@@ -348,13 +353,13 @@ void printPCode(AST* ast, SymbolTable symbolTable) {
 		printPCode(ast->getRight(), symbolTable);
 
 		// print the final jumps
-		for (int i = CASE_SWITCH_LAB; i > 0; i--) {
+		for (int i = CASE_SWITCH_LAB - 1; i > 0; i--) {
 			cout << "ujp case_" << END_SWITCH_LAB << "_" << i << endl;
 		}
 		cout << "switch_end_" << la << ":" << endl;
 		
 		// update label numbers
-		CASE_SWITCH_LAB = 0;
+		CASE_SWITCH_LAB = 1;
 		END_SWITCH_LAB++;
 	}
 	else if (ast->getValue() == "caseList") {
@@ -366,6 +371,10 @@ void printPCode(AST* ast, SymbolTable symbolTable) {
 		cout << "case_" << END_SWITCH_LAB << "_" << la << ":" << endl;
 		printPCode(ast->getRight()->getRight(), symbolTable);
 		cout << "ujp switch_end_" << END_SWITCH_LAB << endl;
+	}
+	else if (ast->getValue() == "pointer") {
+		printPCode(ast->getLeft(), symbolTable);
+		cout << "ind" << endl;
 	}
 	else return;
 }
@@ -379,7 +388,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/TestsHw2/tree4.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree2.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
