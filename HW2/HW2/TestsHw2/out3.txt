@@ -9,10 +9,13 @@ sto
 ldc 56
 ldc 10
 sto
+
+//dis
 ldc 45
 ldc 17
 ixa 1
 dec 10
+
 ldc 7
 sto
 ldc 5
