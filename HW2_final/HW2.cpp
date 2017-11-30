@@ -7,8 +7,7 @@
 #include <map>
 
 static int LAB = 0;
-static int CASE_SWITCH_LAB = 0;
-static int END_SWITCH_LAB = 0;
+static int LAST_WHILE_LAB = 0;
 
 using namespace std;
 
@@ -527,6 +526,7 @@ void code(AST* ast, SymbolTable* symbolTable) {
 	}
 	else if (ast->getValue() == "while") {
 		la = LAB++, lb = LAB++;
+		LAST_WHILE_LAB = lb;
 		cout << "while_" << la << ":" << endl;
 		coder(ast->getLeft(), symbolTable);
 		cout << "fjp while_out_" << lb << endl;
@@ -562,7 +562,7 @@ void code(AST* ast, SymbolTable* symbolTable) {
 		cout << "switch_end_" << la << ":" << endl;	
 	}
 	else if (ast->getValue() == "break") {
-		cout << "ujp while_out_" << LAB << endl;
+		cout << "ujp while_out_" << LAST_WHILE_LAB << endl;
 	}
 }
 
@@ -574,7 +574,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree6.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree11.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
