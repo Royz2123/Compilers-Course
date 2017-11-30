@@ -24,7 +24,7 @@ void code(AST* ast, SymbolTable* symbolTable);
 void codem(AST* ast, SymbolTable* symbolTable);
 void coded(AST* ast, SymbolTable* symbolTable);
 void coder(AST* ast, SymbolTable* symbolTable);
-void codel(AST* ast, SymbolTable* symbolTable);
+string codel(AST* ast, SymbolTable* symbolTable);
 void codei(AST* ast, SymbolTable* symbolTable, string id);
 void codec(AST* ast, SymbolTable* symbolTable, int la);
 
@@ -160,11 +160,13 @@ public:
 class Pointer : public Variable {
 public:
 	int pointedAddress;
+	string pointedVar;
 	
 	Pointer(string vname, string vtype, int vaddress, int vsize) : Variable(vname, vtype, vaddress, vsize) {}
 
 	void setPointer(AST* ast, SymbolTable* st) {
-		pointedAddress = st->st[ast->getLeft()->getLeft()->getValue()]->getAddress();
+		pointedVar = ast->getLeft()->getLeft()->getValue();
+		pointedAddress = st->st[pointedVar]->getAddress();
 	}
 };
 
@@ -179,13 +181,14 @@ public:
 	
 	void setArray(AST* ast, SymbolTable* st) {
 		string type = ast->getRight()->getValue();
-		
+		string name = ast->getRight()->getLeft()->getValue();
+
 		// find typeSize
 		if (Variable::isPrimOrPntr(type)) {
 			typeSize = 1;
 		}
 		else {
-			typeSize = st->st[type]->getSize();
+			typeSize = st->st[name]->getSize();
 		}
 
 		// find dims. go all left then reucrse
@@ -262,11 +265,12 @@ public:
 
 		while (tmp != NULL) {
 			string type = tmp->getRight()->getRight()->getValue();
+			string name = tmp->getRight()->getLeft()->getLeft()->getValue();
 			if (Variable::isPrimOrPntr(type)) {
 				size += 1;
 			}
 			else {
-				size += st->st[type]->getSize();
+				size += st->st[name]->getSize();
 			}
 			tmp = tmp->getLeft();
 		}	
@@ -329,6 +333,7 @@ void codei(AST* indexList, SymbolTable* symbolTable, string id) {
 
 	// caluclate access shift
 	for (int j = 0; j < final_index; j++) { 
+		di = 1;
 		// calculate the ixa part (needs to be done every time)
 		for (int i = j + 1; i <= final_index; i++) {
 			di *= myArr->getRangeLength(myArr->ranges[i]);
@@ -341,37 +346,6 @@ void codei(AST* indexList, SymbolTable* symbolTable, string id) {
 	cout <<  "ixa " << myArr->typeSize << endl;
 	cout << "dec " << myArr->subpart << endl;
 }
-
-void codem(AST* ast, SymbolTable* symbolTable) {
-	if (ast->getValue() == "pointer") {
-		cout << "ind" << endl;
-		codem(ast->getRight(), symbolTable);
-	}
-	else if (ast->getValue() == "record") {
-		int increment = symbolTable->st[ast->getRight()->getLeft()->getValue()]->getOffset();
-		cout << "inc " << increment << endl;
-		codem(ast->getRight(), symbolTable);
-	}
-	else if (ast->getValue() == "array") {
-		codei(ast->getRight(), symbolTable, ast->getLeft()->getLeft()->getValue());
-		codem(ast->getRight(), symbolTable);
-	}
-}
-
-void codel(AST* ast, SymbolTable* symbolTable) {
-	if (ast->getValue() == "identifier") {
-		cout << "ldc " << symbolTable->getAddressByName(ast->getLeft()->getValue()) << endl;
-	}
-	else if (ast->getValue() == "pointer") {
-		codel(ast->getLeft(), symbolTable);
-		cout << "ind" << endl;
-	}
-	else {
-		codel(ast->getLeft(), symbolTable);
-		codem(ast, symbolTable);
-	}
-}
-
 
 void coder(AST* ast, SymbolTable* symbolTable) {
 	if (ast->getValue() == "plus") { // A+B
@@ -448,56 +422,59 @@ void coder(AST* ast, SymbolTable* symbolTable) {
 	else if (ast->getValue() == "false") { // false
 		cout << "ldc 0" << endl;
 	}
-	else if (
-		ast->getValue() == "constReal" 
-		|| ast->getValue() == "constInt"
-	) {  
+	else if (ast->getValue() == "constReal" || ast->getValue() == "constInt") {  
 		cout << "ldc " << ast->getLeft()->getValue() << endl;
 	}
-	else if (ast->getValue() == "identifier"){
-		cout << "ldc " << symbolTable->getAddressByName(ast->getLeft()->getValue()) << endl;
-		cout << "ind" << endl;
-	}
-	else if (ast->getValue() == "array" || ast->getValue() == "record") {
+	else if (ast->getValue() == "identifier" || ast->getValue() == "array" || ast->getValue() == "record"){
 		codel(ast, symbolTable);
 		cout << "ind" << endl;
 	}
 }
 
-void caseGenerator(AST* ast, SymbolTable* symbolTable, int la) {
-	if (ast == NULL) {
-		return;
+/*
+void codem(AST* ast, SymbolTable* symbolTable) {
+	if (ast->getValue() == "identifier") {
+		cout << "ldc " << symbolTable->getAddressByName(ast->getLeft()->getValue()) << endl;
 	}
-	//first go recursively down
-	caseGenerator(ast->getLeft(), symbolTable, la);
-
-	// now we have caseList in ast. get all data about this case
-	string caseNum = ast->getRight()->getLeft()->getLeft()->getValue();
-
-	cout << "case_" << la << "_" << caseNum << ":" << endl;
-	code(ast->getRight()->getRight(), symbolTable);
-	cout << "ujp switch_end_" << la << endl;
-}
-
-void caseJumpGenerator(AST* ast, SymbolTable* symbolTable, int la) {
-	if (ast == NULL) {
-		return;
+	else if (ast->getValue() == "pointer") {
+		cout << "ind" << endl;
+		codem(ast->getRight(), symbolTable);
 	}
-	// first handle this node
-	string caseNum = ast->getRight()->getLeft()->getLeft()->getValue();
-	cout << "ujp case_" << la << "_" << caseNum << endl;
-
-	// next handle cases recursively
-	caseJumpGenerator(ast->getLeft(), symbolTable, la);
+	else if (ast->getValue() == "record") {
+		codem(ast->getLeft(), symbolTable);
+		int increment = symbolTable->st[ast->getRight()->getLeft()->getValue()]->getOffset();
+		cout << "inc " << increment << endl;
+	}
+	else if (ast->getValue() == "array") {
+		codem(ast->getLeft(), symbolTable);
+		codei(ast->getRight(), symbolTable, ast->getLeft()->getLeft()->getValue());
+	}
 }
+*/
 
-
-void codec(AST* ast, SymbolTable* symbolTable, int la) {
-	// first generate cases code
-	caseGenerator(ast, symbolTable, la);
-
-	// then generate udp jumps after
-	caseJumpGenerator(ast, symbolTable, la);
+string codel(AST* ast, SymbolTable* symbolTable) {
+	string currId = "", oldId = "";
+	
+	if (ast->getValue() == "identifier") {
+		currId = ast->getLeft()->getValue();
+		cout << "ldc " << symbolTable->getAddressByName(currId) << endl;
+	}
+	else if (ast->getValue() == "pointer") {
+		oldId = codel(ast->getLeft(), symbolTable);
+		currId = ((Pointer*)symbolTable->st[oldId])->pointedVar;
+		cout << "ind" << endl;
+	}
+	else if (ast->getValue() == "record") {
+		codel(ast->getLeft(), symbolTable);
+		currId = ast->getRight()->getLeft()->getValue();
+		int increment = symbolTable->st[currId]->getOffset();
+		cout << "inc " << increment << endl;
+	}
+	else if (ast->getValue() == "array") {
+		currId = codel(ast->getLeft(), symbolTable);
+		codei(ast->getRight(), symbolTable, currId);
+	}
+	return currId;
 }
 
 
@@ -566,6 +543,41 @@ void code(AST* ast, SymbolTable* symbolTable) {
 	}
 }
 
+void caseGenerator(AST* ast, SymbolTable* symbolTable, int la) {
+	if (ast == NULL) {
+		return;
+	}
+	//first go recursively down
+	caseGenerator(ast->getLeft(), symbolTable, la);
+
+	// now we have caseList in ast. get all data about this case
+	string caseNum = ast->getRight()->getLeft()->getLeft()->getValue();
+
+	cout << "case_" << la << "_" << caseNum << ":" << endl;
+	code(ast->getRight()->getRight(), symbolTable);
+	cout << "ujp switch_end_" << la << endl;
+}
+
+void caseJumpGenerator(AST* ast, SymbolTable* symbolTable, int la) {
+	if (ast == NULL) {
+		return;
+	}
+	// first handle this node
+	string caseNum = ast->getRight()->getLeft()->getLeft()->getValue();
+	cout << "ujp case_" << la << "_" << caseNum << endl;
+
+	// next handle cases recursively
+	caseJumpGenerator(ast->getLeft(), symbolTable, la);
+}
+
+void codec(AST* ast, SymbolTable* symbolTable, int la) {
+	// first generate cases code
+	caseGenerator(ast, symbolTable, la);
+
+	// then generate udp jumps after
+	caseJumpGenerator(ast, symbolTable, la);
+}
+
 void generatePCode(AST* ast, SymbolTable symbolTable) {
 	// call the code
 	code(ast->getRight()->getRight(), &symbolTable);
@@ -574,7 +586,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree11.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree8.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
