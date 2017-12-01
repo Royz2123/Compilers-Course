@@ -8,6 +8,7 @@
 
 static int LAB = 0;
 static int LAST_WHILE_LAB = 0;
+static int LAST_SWITCH_LAB = 0;
 
 using namespace std;
 
@@ -175,20 +176,24 @@ public:
 	int dim;
 	int typeSize;
 	int subpart;
+	string var;
 	vector<pair<int, int>> ranges;
 
 	Array(string vname, string vtype, int vaddress, int vsize) : Variable(vname, vtype, vaddress, vsize) {}
 	
 	void setArray(AST* ast, SymbolTable* st) {
 		string type = ast->getRight()->getValue();
-		string name = ast->getRight()->getLeft()->getValue();
+		string nodeName = "";
 
 		// find typeSize
 		if (Variable::isPrimOrPntr(type)) {
 			typeSize = 1;
+			var = name;
 		}
 		else {
-			typeSize = st->st[name]->getSize();
+			nodeName = ast->getRight()->getLeft()->getValue();
+			typeSize = st->st[nodeName]->getSize();
+			var = nodeName;
 		}
 
 		// find dims. go all left then reucrse
@@ -471,8 +476,9 @@ string codel(AST* ast, SymbolTable* symbolTable) {
 		cout << "inc " << increment << endl;
 	}
 	else if (ast->getValue() == "array") {
-		currId = codel(ast->getLeft(), symbolTable);
-		codei(ast->getRight(), symbolTable, currId);
+		oldId = codel(ast->getLeft(), symbolTable);
+		currId = ((Array*)symbolTable->st[oldId])->var;
+		codei(ast->getRight(), symbolTable, oldId);
 	}
 	return currId;
 }
@@ -532,6 +538,7 @@ void code(AST* ast, SymbolTable* symbolTable) {
 	}
 	else if (ast->getValue() == "switch") {
 		la = LAB++;
+		LAST_SWITCH_LAB = la;
 		coder(ast->getLeft(), symbolTable);
 		cout << "neg" << endl;
 		cout << "ixj switch_end_" << la << endl;
@@ -539,7 +546,12 @@ void code(AST* ast, SymbolTable* symbolTable) {
 		cout << "switch_end_" << la << ":" << endl;	
 	}
 	else if (ast->getValue() == "break") {
-		cout << "ujp while_out_" << LAST_WHILE_LAB << endl;
+		if (LAST_SWITCH_LAB > LAST_WHILE_LAB) {
+			cout << "ujp switch_out_" << LAST_SWITCH_LAB << endl;
+		}
+		else {
+			cout << "ujp while_out_" << LAST_WHILE_LAB << endl;
+		}
 	}
 }
 
@@ -586,7 +598,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree8.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree10.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
