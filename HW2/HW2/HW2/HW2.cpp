@@ -598,7 +598,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHw2/tree10.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/TestsHw2/TestsHw2/tree2.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);

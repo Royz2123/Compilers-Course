@@ -2,16 +2,19 @@ ldc 6
 inc 0
 ldc 6
 sto
+
 ldc 9
 ldc 6
 inc 0
 ind
 sto
+
 ldc 9
 ind
 inc 1
 ldc 6
 sto
+
 ldc 9
 ind
 inc 1
@@ -19,12 +22,14 @@ ind
 inc 2
 ldc 5
 sto
+
 ldc 5
 ldc 1
 ixa 1
 dec 1
 ldc 2.500000
 sto
+
 ldc 9
 ind
 inc 1
