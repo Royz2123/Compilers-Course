@@ -23,6 +23,7 @@ class Record;
 
 // FUCNTION DECLERATIONS
 void code(AST* ast, SymbolTable* symbolTable, string funcName);
+void codea(AST* ast, SymbolTable* symbolTable, string funcName);
 void coder(AST* ast, SymbolTable* symbolTable, string funcName);
 string codel(AST* ast, SymbolTable* symbolTable, string funcName);
 void codei(AST* ast, SymbolTable* symbolTable, string id, string funcName);
@@ -549,6 +550,21 @@ string capitalize(string &s) {
 	return ret;
 }
 
+
+// handles an argument list
+void codea(AST* ast, SymbolTable* symbolTable, string funcName) {
+	if (ast == NULL) {
+		return;
+	}
+
+	// call recursively on left
+	codea(ast->getLeft(), symbolTable, funcName);
+
+	// handle current node (TODO: not just coder!)
+	coder(ast->getRight(), symbolTable, funcName);
+}
+
+
 // statementsList handler. node is statementsList
 void code(AST* ast, SymbolTable* symbolTable, string funcName) {
 	if (ast == NULL) {
@@ -621,9 +637,9 @@ void code(AST* ast, SymbolTable* symbolTable, string funcName) {
 	}
 	else if (ast->getValue() == "call") {
 		string newFunc = ast->getLeft()->getLeft()->getValue();
-		cout << "mst " << endl;
-		// need to handle argument list
-		cout << "cup " << fst->parmSize << " " << capitalize(newFunc) << endl;
+		cout << "mst " << endl;									// print mst TODO: add static link something
+		codea(ast->getRight(), symbolTable, funcName);			// handle argument list			
+		cout << "cup " << fst->parmSize << " " << capitalize(newFunc) << endl;	// call function TODO: descriptor\cupi
 	}
 }
 
@@ -800,8 +816,11 @@ string codel(AST* ast, SymbolTable* symbolTable, string funcName) {
 
 	if (ast->getValue() == "identifier") {
 		currId = ast->getLeft()->getValue();
-		nestingDiff = symbolTable->nestingDiff(currId, funcName);
-		varOffset = fst->st[currId]->getOffset();
+		// make sure this isn't the return value
+		if (currId != funcName) {
+			nestingDiff = symbolTable->nestingDiff(currId, funcName);
+			varOffset = fst->st[currId]->getOffset();
+		}
 		cout << "lda " << nestingDiff << " " << varOffset << endl;
 	}
 	else if (ast->getValue() == "pointer") {
