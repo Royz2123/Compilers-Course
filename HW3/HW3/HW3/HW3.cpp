@@ -6,9 +6,13 @@
 #include <algorithm>
 #include <map>
 
+#define MAX(x, y) ((x > y) ? x : y)
+#define MIN(x, y) ((x < y) ? x : y)
+
 static int LAB = 0;
 static int LAST_WHILE_LAB = 0;
 static int LAST_SWITCH_LAB = 0;
+static int DYNAMIC_DEPTH = 0;
 
 using namespace std;
 
@@ -20,10 +24,12 @@ class Variable;
 class Pointer;
 class Array;
 class Record;
+class FunctionDescriptor;
+class SEPCalculator;
 
 // FUCNTION DECLERATIONS
 void code(AST* ast, SymbolTable* symbolTable, string funcName);
-void codea(AST* ast, SymbolTable* symbolTable, string funcName);
+void codea(AST* ast, SymbolTable* symbolTable, string funcName, string newFunc, int parmIndex);
 void coder(AST* ast, SymbolTable* symbolTable, string funcName);
 string codel(AST* ast, SymbolTable* symbolTable, string funcName);
 void codei(AST* ast, SymbolTable* symbolTable, string id, string funcName);
@@ -79,6 +85,7 @@ protected:
 	int offset;			// offset of variable in function
 	int size;
 	int structOffset = 0;
+	bool byVal;
 
 public:
 	int nestingLevel;
@@ -88,6 +95,15 @@ public:
 		this->type = vtype;
 		this->offset = voffset;
 		this->size = vsize;
+		this->byVal = true;
+	}
+
+	void setArgType(bool byVal) {
+		this->byVal = byVal;
+	}
+
+	bool getArgType() {
+		return this->byVal;
 	}
 
 	static bool isPrimitive(string type) {
@@ -115,7 +131,10 @@ public:
 	}
 
 	int getSize() {
-		return this->size;
+		if (byVal) {
+			return this->size;
+		}
+		return 1;
 	}
 
 	string getType() {
@@ -125,12 +144,15 @@ public:
 
 class FuncSymbolTable {
 public:
+	AST* funcRoot;
 	int parmSize;				// size of all the parameters for this function
 	int currOffset;				// relative address! starts from 5!
+	int SEP_size;
 	int nestingLevel;			// Nesting level of function (All values the function defines sit here)
 	map<string, Variable*> st;	// local variables and parameters!
+	vector<Variable*> parms;
 
-	FuncSymbolTable(int voffset, int vnestingLevel);
+	FuncSymbolTable(int voffset, int vnestingLevel, AST * vroot);
 	Variable* getVar(string name);
 	int getOffsetByName(string name);
 	int getSizeByName(string name);
@@ -138,11 +160,14 @@ public:
 
 	// calculates the space needed for the stack pointer
 	int calcSSP();
+	int calcSEP(SymbolTable* st);
+
+	int sumSizes(int parmIndex);
 
 	// adds a node to the symbolTable
 	void handleVarNode(AST* currVar, bool isParm);
 
-	// TODO: parmList handler. Watch out for by value shit
+	// parmList handler
 	void codep(AST* ast);
 
 	// declerationsList handler. basically handles it and updates
@@ -156,9 +181,9 @@ public:
 class SymbolTable {
 public:
 	map<string, FuncSymbolTable*> st;		// maps between functions and their symbolTable
-	// TODO: calling tree shit
+											// TODO: calling tree shit
 
-	// finds the differnce for lod, lda functions
+											// finds the differnce for lod, lda functions
 	int nestingDiff(string varName, string currFunc);
 	int nestingDiff(string varName, int currLevel);
 	// returns a variable from the tree
@@ -212,12 +237,124 @@ public:
 	void setSize(AST* ast, FuncSymbolTable* st);
 };
 
+class FunctionDescriptor : public Variable {
+	FunctionDescriptor(string vname, string vtype, int voffset, int vsize);
+};
+
+class SEPCalculator {
+public:
+	AST* root;			// root from where calculating starts
+	SymbolTable* st;
+
+	SEPCalculator(AST* vroot, SymbolTable* vst) { this->root = vroot; this->st = vst; }
+
+	int calcSEP() {
+		return recCalc(this->root);
+	}
+
+	int argList(AST* node, FuncSymbolTable* fst, int parmIndex) {
+		if (node == NULL) {
+			return 0;
+		}
+		// sum up all of the arguments until now
+		int argSum = fst->sumSizes(parmIndex);
+
+		// return max between this call and previous
+		return MAX(
+			argList(node->getLeft(), fst, parmIndex - 1),		// was max before?
+			argSum + recCalc(node->getRight())					// or is this the max?
+		);
+	}
+
+	int recCalc(AST* node) {
+		if (node == NULL) {
+			return 0;
+		}
+
+		// check waht we are dealing with
+		string value = node->getValue();
+
+		// simple rules, gonna add just one
+		if (
+			value == "constInt"
+			|| value == "true"
+			|| value == "false"
+			|| value == "constReal"
+			|| value == "identifier"
+			) {
+			return 1;
+		}
+		// max(L, 1 + R) ==> need to find left and then only 1
+		// in stack so find max
+		else if (
+			value == "plus"
+			|| value == "minus"
+			|| value == "multiply"
+			|| value == "divide"
+			|| value == "and"
+			|| value == "or"
+			|| value == "lessOrEquals"
+			|| value == "greaterOrEquals"
+			|| value == "greaterThan"
+			|| value == "equals"
+			|| value == "notEqual"
+			|| value == "lessThan"
+			|| value == "array"					// TODO: arrays not working properly
+			|| value == "record"
+			|| value == "indexList"
+			|| value == "assignment"
+			) {
+			return MAX(recCalc(node->getLeft()), 1 + recCalc(node->getRight()));
+		}
+		// ==> just left, easy
+		else if (
+			value == "not"
+			|| value == "neg"
+			|| value == "print"
+			) {
+			return recCalc(node->getLeft());
+		}
+		else if (
+			value == "call"
+			) {
+			FuncSymbolTable* fst = this->st->st[node->getLeft()->getLeft()->getValue()];
+			return MAX(
+				5 + argList(node->getRight(), fst, fst->parms.size() - 1),
+				5 + fst->parmSize
+			);
+		}
+		// max between both branches, which statement increases by more
+		else if (
+			value == "statementsList"
+			|| value == "while"
+			|| value == "if"
+			|| value == "else"
+			) {
+			return MAX(recCalc(node->getLeft()), recCalc(node->getRight()));
+		}
+		else if (
+			value == "program"
+			|| value == "procedure"
+			|| value == "function"
+			|| value == "content"
+			) {
+			return recCalc(node->getRight());
+		}
+		else {
+			cout << "unhandle value!!!" << value << endl;
+			return 0;
+		}
+	}
+};
 
 // FuncSymbolTable implementation
 
-FuncSymbolTable::FuncSymbolTable(int voffset, int vnestingLevel) {
+FuncSymbolTable::FuncSymbolTable(int voffset, int vnestingLevel, AST* vroot) {
 	this->nestingLevel = vnestingLevel;
 	this->currOffset = voffset;
+	this->SEP_size = 0;
+	this->funcRoot = vroot;
+	this->parms = vector<Variable*>();
 }
 
 Variable* FuncSymbolTable::getVar(string name) {
@@ -244,6 +381,22 @@ int FuncSymbolTable::getStructOffset(string baseVar, string newVar) {
 
 int FuncSymbolTable::calcSSP() {
 	return currOffset;
+}
+
+int FuncSymbolTable::sumSizes(int parmIndex) {
+	int argSum = 0;
+	for (int i = 0; i < parmIndex; i++) {
+		argSum += this->parms[i]->getSize();
+	}
+	return argSum;
+}
+
+int FuncSymbolTable::calcSEP(SymbolTable* st) {
+	// calculate based on this->funcRoot
+	SEPCalculator* sepCalc = new SEPCalculator(this->funcRoot, st);
+	int sepVal = sepCalc->calcSEP();
+	delete sepCalc;
+	return sepVal;
 }
 
 // TODO: parmList handler. Watch out for by value shit
@@ -273,24 +426,34 @@ void FuncSymbolTable::coded(AST* ast) {
 	this->handleVarNode(ast->getRight(), false);
 }
 
-
 // handle current node (add to symbolTable). node is currently var or byValue
 void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 	string varName = currVar->getLeft()->getLeft()->getValue();
 	string varType = currVar->getRight()->getValue();
 
+	// Check if by Val or by Reference for parms
+	bool argType = (isParm && currVar->getValue() == "byReference") ? false : true;
+
 	// handle current node
 	if (Variable::isPrimitive(varType)) {
 		this->st[varName] = new Variable(varName, varType, this->currOffset, 1);
 		this->currOffset++;
-		this->parmSize += (isParm) ? 1 : 0;
+		if (isParm) {
+			this->st[varName]->setArgType(argType);
+			this->parmSize += 1;
+			this->parms.push_back(this->st[varName]);
+		}
 	}
 	else if (varType == "pointer") {
 		Pointer* myPntr = new Pointer(varName, varType, this->currOffset, 1);
 		this->st[varName] = (Variable*)myPntr;
 		myPntr->setPointer(currVar->getRight(), this);
 		this->currOffset++;
-		this->parmSize += (isParm) ? 1 : 0;
+		if (isParm) {
+			this->st[varName]->setArgType(argType);
+			this->parmSize += 1;
+			this->parms.push_back(this->st[varName]);
+		}
 	}
 	else if (varType == "array") {
 		// create an array and set to size 1 (will change in setArray)
@@ -298,7 +461,11 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 		this->st[varName] = (Variable*)myArr;
 		myArr->setArray(currVar->getRight(), this);
 		this->currOffset += myArr->getSize();
-		this->parmSize += (isParm) ? myArr->getSize() : 0;
+		if (isParm) {
+			this->st[varName]->setArgType(argType);
+			this->parmSize += myArr->getSize();
+			this->parms.push_back(this->st[varName]);
+		}
 
 	}
 	else if (varType == "record") {
@@ -306,20 +473,22 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 		Record* myRec = new Record(varName, varType, this->currOffset, 0);
 		this->st[varName] = (Variable*)myRec;
 		myRec->setRecord(currVar->getRight(), this);		// currOffset is updated in setRecord
-		this->parmSize += (isParm) ? myRec->getSize() : 0;
+		if (isParm) {
+			this->st[varName]->setArgType(argType);
+			this->parmSize += myRec->getSize();
+			this->parms.push_back(this->st[varName]);
+		}
 	}
 }
 
-
 // Gets a tree that has either prog/func/proc and create a symbol table from it
 FuncSymbolTable* FuncSymbolTable::generateFuncSymbolTable(AST* tree, int nestingLevel) {
-	FuncSymbolTable* ST = new FuncSymbolTable(5, nestingLevel);
+	FuncSymbolTable* ST = new FuncSymbolTable(5, nestingLevel, tree);
 	ST->codep(tree->getLeft()->getRight()->getLeft());				// TODO: Add local parameters to symbolTable
 
 	if (tree->getRight()->getLeft() != NULL) {
 		ST->coded(tree->getRight()->getLeft()->getLeft());			// Add local variable to symbolTable
 	}
-
 	return ST;
 }
 
@@ -412,10 +581,9 @@ void SymbolTable::funcSymbolHandler(AST* ast, int depth) {
 
 SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 	SymbolTable newSt = SymbolTable();
-	newSt.funcSymbolHandler(tree, 0);		// call from depth 0
+	newSt.funcSymbolHandler(tree, 1);		// call from depth 1
 	return newSt;
 }
-
 
 
 // Pointer implementation
@@ -426,8 +594,6 @@ void Pointer::setPointer(AST* ast, FuncSymbolTable* fst) {
 	pointedVar = ast->getLeft()->getLeft()->getValue();
 	pointedOffset = fst->st[pointedVar]->getOffset();
 }
-
-
 
 
 // Array Implementation
@@ -495,7 +661,6 @@ int Array::getRangeLength(pair<int, int> range) {
 }
 
 
-
 // Record Implementation
 
 Record::Record(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
@@ -540,6 +705,12 @@ void Record::setSize(AST* ast, FuncSymbolTable* st) {
 }
 
 
+// FunctionDescriptor Implementation
+
+FunctionDescriptor::FunctionDescriptor(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
+
+
+
 // FUNCTION DEFINITIONS
 
 string capitalize(string &s) {
@@ -550,20 +721,28 @@ string capitalize(string &s) {
 	return ret;
 }
 
-
 // handles an argument list
-void codea(AST* ast, SymbolTable* symbolTable, string funcName) {
+void codea(AST* ast, SymbolTable* symbolTable, string funcName, string newFunc, int parmIndex) {
 	if (ast == NULL) {
 		return;
 	}
 
 	// call recursively on left
-	codea(ast->getLeft(), symbolTable, funcName);
+	codea(ast->getLeft(), symbolTable, funcName, newFunc, parmIndex - 1);
 
-	// handle current node (TODO: not just coder!)
-	coder(ast->getRight(), symbolTable, funcName);
+	// handle current parameter, check if byVal or byRef
+	if (symbolTable->st[newFunc]->parms[parmIndex]->getArgType()) {
+		// parm by value
+		coder(ast->getRight(), symbolTable, funcName);
+
+		// if array call movs
+		// move into stack with movs
+		cout << "movs " << symbolTable->st[newFunc]->parms[parmIndex]->getSize() << endl;
+	}
+	else {
+		codel(ast->getRight(), symbolTable, funcName);
+	}
 }
-
 
 // statementsList handler. node is statementsList
 void code(AST* ast, SymbolTable* symbolTable, string funcName) {
@@ -577,7 +756,7 @@ void code(AST* ast, SymbolTable* symbolTable, string funcName) {
 	code(ast->getLeft(), symbolTable, funcName);
 
 	// get current statement
-	ast = ast->getRight();	
+	ast = ast->getRight();
 
 	// handle statement type	
 	if (ast->getValue() == "assignment") {
@@ -636,13 +815,12 @@ void code(AST* ast, SymbolTable* symbolTable, string funcName) {
 		}
 	}
 	else if (ast->getValue() == "call") {
-		string newFunc = ast->getLeft()->getLeft()->getValue();
-		cout << "mst " << endl;									// print mst TODO: add static link something
-		codea(ast->getRight(), symbolTable, funcName);			// handle argument list			
-		cout << "cup " << fst->parmSize << " " << capitalize(newFunc) << endl;	// call function TODO: descriptor\cupi
+		coder(ast, symbolTable, funcName);
+	}
+	else {
+		cout << "Unsupported code func: " << ast->getValue() << endl;
 	}
 }
-
 
 // handles a single function. root AST should proc/func/prog
 void funcHandler(AST* ast, SymbolTable* st)
@@ -657,26 +835,27 @@ void funcHandler(AST* ast, SymbolTable* st)
 	string funcName = ast->getLeft()->getLeft()->getLeft()->getValue();
 
 	int SSP = st->st[funcName]->calcSSP();
+	int SEP = st->st[funcName]->calcSEP(st);
 
 	// Put start of function (label, ssp, sep...)
-	cout << capitalize(funcName) << ":" << endl;	
+	cout << capitalize(funcName) << ":" << endl;
 	cout << "ssp " << SSP << endl;
-	cout << "sep <think!>:" << endl;
-	cout << "ujp " << capitalize(funcName) << "_begin" << endl;	
+	cout << "sep " << SEP << endl;
+	cout << "ujp " << capitalize(funcName) << "_begin" << endl;
 
 	// check for fList (sometimes doesn't exist)
 	if (scope != NULL) {
 		fList = scope->getRight();
-	
+
 		// traverse on fList and call this function recursively on each fuction
 		while (fList != NULL) {
 			funcHandler(fList->getRight(), st);
 			fList = fList->getLeft();
 		}
 	}
-	
+
 	// handle this function code
-	cout << capitalize(funcName) << "_begin:" << endl;		
+	cout << capitalize(funcName) << "_begin:" << endl;
 	code(sList, st, funcName);
 
 	// End function, based on type
@@ -686,7 +865,7 @@ void funcHandler(AST* ast, SymbolTable* st)
 	else if (funcType == "function") {
 		cout << "retf" << endl;
 	}
-	else if (funcType == "procedure"){
+	else if (funcType == "procedure") {
 		cout << "retp" << endl;
 	}
 	else {
@@ -805,6 +984,18 @@ void coder(AST* ast, SymbolTable* symbolTable, string funcName) {
 		codel(ast, symbolTable, funcName);
 		cout << "ind" << endl;
 	}
+	else if (ast->getValue() == "call") {
+		string newFunc = ast->getLeft()->getLeft()->getValue();
+		FuncSymbolTable* newFst = symbolTable->getFuncTable(newFunc);
+		int callingLevel = symbolTable->st[funcName]->nestingLevel + 1;		// calling level is at funcLevel + 1, statemtnList is one down
+		int nd = callingLevel - symbolTable->st[newFunc]->nestingLevel;
+		cout << "mst " << nd << endl;										// print mst 
+		codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list			
+		cout << "cup " << newFst->parmSize << " " << capitalize(newFunc) << endl;	// call function TODO: descriptor\cupi
+	}
+	else {
+		cout << "Unsupported coder func: " << ast->getValue() << endl;
+	}
 }
 
 // TODO: work! need to support new lod and lda statements
@@ -839,9 +1030,11 @@ string codel(AST* ast, SymbolTable* symbolTable, string funcName) {
 		currId = ((Array*)fst->st[oldId])->var;
 		codei(ast->getRight(), symbolTable, oldId, funcName);
 	}
+	else {
+		cout << "Unsupported codel func: " << ast->getValue() << endl;
+	}
 	return currId;
 }
-
 
 void caseGenerator(AST* ast, SymbolTable* symbolTable, int la, string funcName) {
 	if (ast == NULL) {
