@@ -24,7 +24,7 @@ class Variable;
 class Pointer;
 class Array;
 class Record;
-class FunctionDescriptor;
+class FuncDesc;
 class SEPCalculator;
 
 // FUCNTION DECLERATIONS
@@ -35,6 +35,7 @@ string codel(AST* ast, SymbolTable* symbolTable, string funcName);
 void codei(AST* ast, SymbolTable* symbolTable, string id, string funcName);
 void codec(AST* ast, SymbolTable* symbolTable, int la, string funcName);
 void funcHandler(AST* ast, SymbolTable* symbolTable);
+void funcHelper(AST* fList, SymbolTable* st);
 string capitalize(string &s);
 
 // Abstract Syntax Tree
@@ -134,7 +135,9 @@ public:
 		if (byVal) {
 			return this->size;
 		}
-		return 1;
+		else {
+			return 1;
+		}
 	}
 
 	string getType() {
@@ -144,6 +147,7 @@ public:
 
 class FuncSymbolTable {
 public:
+	SymbolTable* fatherST;
 	AST* funcRoot;
 	int parmSize;				// size of all the parameters for this function
 	int currOffset;				// relative address! starts from 5!
@@ -152,7 +156,7 @@ public:
 	map<string, Variable*> st;	// local variables and parameters!
 	vector<Variable*> parms;
 
-	FuncSymbolTable(int voffset, int vnestingLevel, AST * vroot);
+	FuncSymbolTable(int voffset, int vnestingLevel, AST * vroot, SymbolTable* vst);
 	Variable* getVar(string name);
 	int getOffsetByName(string name);
 	int getSizeByName(string name);
@@ -175,15 +179,14 @@ public:
 	void coded(AST* ast);
 
 	// Gets a tree that has either prog/func/proc and create a symbol table from it
-	static FuncSymbolTable* generateFuncSymbolTable(AST* tree, int nestingLevel);
+	static FuncSymbolTable* generateFuncSymbolTable(AST* tree, SymbolTable* st, int nestingLevel);
 };
 
 class SymbolTable {
 public:
 	map<string, FuncSymbolTable*> st;		// maps between functions and their symbolTable
-											// TODO: calling tree shit
 
-											// finds the differnce for lod, lda functions
+	// finds the differnce for lda functions
 	int nestingDiff(string varName, string currFunc);
 	int nestingDiff(string varName, int currLevel);
 	// returns a variable from the tree
@@ -200,7 +203,8 @@ public:
 	// basically traverses along functionLists and calls itself recursively
 	// assumes the first one is a program
 	// TODO: parameters? probably
-	void funcSymbolHandler(AST* ast, int depth);
+	void funcSymbolHandler(AST* ast, SymbolTable* st, int depth);
+	void funcSymbolHelper(AST* ast, SymbolTable* st, int depth);
 	static SymbolTable generateSymbolTable(AST* tree);
 };
 
@@ -237,8 +241,11 @@ public:
 	void setSize(AST* ast, FuncSymbolTable* st);
 };
 
-class FunctionDescriptor : public Variable {
-	FunctionDescriptor(string vname, string vtype, int voffset, int vsize);
+// for now identical to regular variable, with size = 2 
+// maybe in future will have purpose
+class FuncDesc : public Variable {
+public:
+	FuncDesc(string vname, string vtype, int voffset);		
 };
 
 class SEPCalculator {
@@ -301,7 +308,6 @@ public:
 			|| value == "lessThan"
 			|| value == "array"					// TODO: arrays not working properly
 			|| value == "record"
-			|| value == "indexList"
 			|| value == "assignment"
 			) {
 			return MAX(recCalc(node->getLeft()), 1 + recCalc(node->getRight()));
@@ -317,7 +323,14 @@ public:
 		else if (
 			value == "call"
 			) {
-			FuncSymbolTable* fst = this->st->st[node->getLeft()->getLeft()->getValue()];
+			string funcName = node->getLeft()->getLeft()->getValue();
+			FuncSymbolTable* fst = this->st->getFuncTable(funcName);
+
+			// probably dealing with fd, find fst for fd
+			if (fst == NULL) {
+				FuncDesc* fd = (FuncDesc*)this->st->getVar(funcName);
+				fst = this->st->st[fd->getType()];
+			}
 			return MAX(
 				5 + argList(node->getRight(), fst, fst->parms.size() - 1),
 				5 + fst->parmSize
@@ -329,6 +342,9 @@ public:
 			|| value == "while"
 			|| value == "if"
 			|| value == "else"
+			|| value == "switch"
+			|| value == "caseList"
+			|| value == "indexList"
 			) {
 			return MAX(recCalc(node->getLeft()), recCalc(node->getRight()));
 		}
@@ -341,7 +357,7 @@ public:
 			return recCalc(node->getRight());
 		}
 		else {
-			cout << "unhandle value!!!" << value << endl;
+			cout << "unhandled value!!! " << value << endl;
 			return 0;
 		}
 	}
@@ -349,12 +365,13 @@ public:
 
 // FuncSymbolTable implementation
 
-FuncSymbolTable::FuncSymbolTable(int voffset, int vnestingLevel, AST* vroot) {
+FuncSymbolTable::FuncSymbolTable(int voffset, int vnestingLevel, AST* vroot, SymbolTable* vst) {
 	this->nestingLevel = vnestingLevel;
 	this->currOffset = voffset;
 	this->SEP_size = 0;
 	this->funcRoot = vroot;
 	this->parms = vector<Variable*>();
+	this->fatherST = vst;
 }
 
 Variable* FuncSymbolTable::getVar(string name) {
@@ -479,11 +496,42 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 			this->parms.push_back(this->st[varName]);
 		}
 	}
+	else if (varType == "identifier") {
+		// identifier type, could be a record or something that has been previously defined
+		string identifier = currVar->getRight()->getLeft()->getValue();
+		Variable* myType = this->fatherST->getVar(identifier);
+
+		// check if this variable exists! if so we need to add it and also create a new one
+		// that is identical to it
+		if (myType != NULL) {
+			cout << "NEEDS HANDLING! VARIABLE OF MY TYPE TRIED TO BE CREATED!!!" << endl;
+			
+			// Variable* myVar = new Variable(myType);
+		}
+		// check if maybe the identifier is a function, in which case we need to create 
+		// a Function Descriptor
+		else if (this->fatherST->st[identifier] != NULL) {
+			FuncDesc* myFunc = new FuncDesc(varName, identifier, this->currOffset);
+			this->st[varName] = (Variable*)myFunc;
+			this->currOffset += 2;
+			if (isParm) {
+				this->st[varName]->setArgType(argType);
+				this->parmSize += 2;
+				this->parms.push_back(this->st[varName]);
+			}
+		}
+		else {
+			cout << "Unrecognized identifier" << identifier << endl;
+		}
+	}
+	else {
+		cout << "Unrecognized type" << varName << varType << endl;
+	}
 }
 
 // Gets a tree that has either prog/func/proc and create a symbol table from it
-FuncSymbolTable* FuncSymbolTable::generateFuncSymbolTable(AST* tree, int nestingLevel) {
-	FuncSymbolTable* ST = new FuncSymbolTable(5, nestingLevel, tree);
+FuncSymbolTable* FuncSymbolTable::generateFuncSymbolTable(AST* tree, SymbolTable* symbolTable, int nestingLevel) {
+	FuncSymbolTable* ST = new FuncSymbolTable(5, nestingLevel, tree, symbolTable);
 	ST->codep(tree->getLeft()->getRight()->getLeft());				// TODO: Add local parameters to symbolTable
 
 	if (tree->getRight()->getLeft() != NULL) {
@@ -511,9 +559,11 @@ Variable* SymbolTable::getVar(string name) {
 
 	// find variable in one of the functions
 	for (it = st.begin(); it != st.end(); it++) {
-		retVar = it->second->getVar(name);
-		if (retVar != NULL) {
-			break;
+		if (it->second != NULL){
+			retVar = it->second->getVar(name);
+			if (retVar != NULL) {
+				break;
+			}
 		}
 	}
 	return retVar;
@@ -538,14 +588,31 @@ void SymbolTable::addFuncTable(string funcName, FuncSymbolTable* funcTable) {
 }
 
 FuncSymbolTable* SymbolTable::getFuncTable(string funcName) {
+	if (this->st.find(funcName) == this->st.end()) {
+		return NULL;
+	}
 	return st[funcName];
 }
+
+// traverses on left branch for funcSymbolHandler. Used to do in loop but it
+// was wrong way! made problems, always go this way on lists!
+void SymbolTable::funcSymbolHelper(AST* fList, SymbolTable* fatherST, int depth) {
+	if (fList == NULL) {
+		return;
+	}
+	// go left first on the functions list (so they all know each other)
+	this->funcSymbolHelper(fList->getLeft(), fatherST, depth);
+
+	// handle this function now that all the left ones have been hadnled
+	this->funcSymbolHandler(fList->getRight(), fatherST, depth + 1);
+}
+
 
 // Goes through entire tree and creates FuncSymbolTables.
 // basically traverses along functionLists and calls itself recursively
 // assumes the first one is a program
 // TODO: parameters? probably
-void SymbolTable::funcSymbolHandler(AST* ast, int depth) {
+void SymbolTable::funcSymbolHandler(AST* ast, SymbolTable* fatherST, int depth) {
 	if (ast == NULL) {
 		return;
 	}
@@ -561,7 +628,7 @@ void SymbolTable::funcSymbolHandler(AST* ast, int depth) {
 
 	// 1) Obviously first time we are here. Create a FuncSybolTable:
 	// Note: that function calls coded and codep!
-	st[funcName] = FuncSymbolTable::generateFuncSymbolTable(ast, depth);
+	st[funcName] = FuncSymbolTable::generateFuncSymbolTable(ast, fatherST, depth);
 
 	// 2) call recursively on fList
 	AST* scope = ast->getRight()->getLeft();
@@ -570,18 +637,14 @@ void SymbolTable::funcSymbolHandler(AST* ast, int depth) {
 	if (scope == NULL) {
 		return;
 	}
-	AST* fList = scope->getRight();
 
-	// travers on fList and call this function recursively on each fuction
-	while (fList != NULL) {
-		this->funcSymbolHandler(fList->getRight(), depth + 1);
-		fList = fList->getLeft();
-	}
+	// travers on fList. depth is changed while traversing on list
+	funcSymbolHelper(scope->getRight(), fatherST, depth);
 }
 
 SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 	SymbolTable newSt = SymbolTable();
-	newSt.funcSymbolHandler(tree, 1);		// call from depth 1
+	newSt.funcSymbolHandler(tree, &newSt, 1);		// call from depth 1
 	return newSt;
 }
 
@@ -705,9 +768,9 @@ void Record::setSize(AST* ast, FuncSymbolTable* st) {
 }
 
 
-// FunctionDescriptor Implementation
+// FuncDesc Implementation
 
-FunctionDescriptor::FunctionDescriptor(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
+FuncDesc::FuncDesc(string vname, string vtype, int voffset) : Variable(vname, vtype, voffset, 2) {}
 
 
 
@@ -737,7 +800,9 @@ void codea(AST* ast, SymbolTable* symbolTable, string funcName, string newFunc, 
 
 		// if array call movs
 		// move into stack with movs
-		cout << "movs " << symbolTable->st[newFunc]->parms[parmIndex]->getSize() << endl;
+		if (symbolTable->st[newFunc]->parms[parmIndex]->getType() == "array") {
+			cout << "movs " << symbolTable->st[newFunc]->parms[parmIndex]->getSize() << endl;
+		}
 	}
 	else {
 		codel(ast->getRight(), symbolTable, funcName);
@@ -822,6 +887,19 @@ void code(AST* ast, SymbolTable* symbolTable, string funcName) {
 	}
 }
 
+void funcHelper(AST* fList, SymbolTable* st) {
+	if (fList == NULL) {
+		return;
+	}
+
+	// first go left
+	funcHelper(fList->getLeft(), st);
+
+	// now handle this function
+	funcHandler(fList->getRight(), st);
+}
+
+
 // handles a single function. root AST should proc/func/prog
 void funcHandler(AST* ast, SymbolTable* st)
 {
@@ -845,13 +923,7 @@ void funcHandler(AST* ast, SymbolTable* st)
 
 	// check for fList (sometimes doesn't exist)
 	if (scope != NULL) {
-		fList = scope->getRight();
-
-		// traverse on fList and call this function recursively on each fuction
-		while (fList != NULL) {
-			funcHandler(fList->getRight(), st);
-			fList = fList->getLeft();
-		}
+		funcHelper(scope->getRight(), st);
 	}
 
 	// handle this function code
@@ -987,18 +1059,43 @@ void coder(AST* ast, SymbolTable* symbolTable, string funcName) {
 	else if (ast->getValue() == "call") {
 		string newFunc = ast->getLeft()->getLeft()->getValue();
 		FuncSymbolTable* newFst = symbolTable->getFuncTable(newFunc);
+
 		int callingLevel = symbolTable->st[funcName]->nestingLevel + 1;		// calling level is at funcLevel + 1, statemtnList is one down
-		int nd = callingLevel - symbolTable->st[newFunc]->nestingLevel;
-		cout << "mst " << nd << endl;										// print mst 
-		codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list			
-		cout << "cup " << newFst->parmSize << " " << capitalize(newFunc) << endl;	// call function TODO: descriptor\cupi
+		int nd = 0;  
+
+		// check if maybe we are dealing with a descriptor
+		if (newFst == NULL) {
+			FuncDesc* fd = (FuncDesc*)symbolTable->getVar(newFunc);
+
+			// set the actual function we are calling
+			newFunc = fd->getType();
+			newFst = symbolTable->getFuncTable(newFunc);
+			int fdLevel = symbolTable->st[symbolTable->getFuncFromVar(fd->getName())]->nestingLevel + 1;	 // calling level is at funcLevel + 1, statemtnList is one down
+
+			nd = callingLevel - fdLevel;
+
+			// print calling things
+ 			cout << "mstf " << nd << endl;													// print mst 
+			codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list			
+			cout << "smp " << newFst->parmSize << endl;
+			cout << "cupi " << nd << " " << fd->getOffset() << endl;	// call function
+		}
+
+		// regular function call, name is correct 
+		else {
+			nd = callingLevel - symbolTable->st[newFunc]->nestingLevel;
+			
+			// print calling things
+			cout << "mst " << nd << endl;												// print mst 
+			codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list			
+			cout << "cup " << newFst->parmSize << " " << capitalize(newFunc) << endl;	// call function
+		}
 	}
 	else {
 		cout << "Unsupported coder func: " << ast->getValue() << endl;
 	}
 }
 
-// TODO: work! need to support new lod and lda statements
 string codel(AST* ast, SymbolTable* symbolTable, string funcName) {
 	string currId = "", oldId = "";
 	FuncSymbolTable* fst = symbolTable->st[funcName];
@@ -1007,10 +1104,19 @@ string codel(AST* ast, SymbolTable* symbolTable, string funcName) {
 
 	if (ast->getValue() == "identifier") {
 		currId = ast->getLeft()->getValue();
+
 		// make sure this isn't the return value
 		if (currId != funcName) {
-			nestingDiff = symbolTable->nestingDiff(currId, funcName);
-			varOffset = fst->st[currId]->getOffset();
+			// check if this is a function descriptor
+			if (symbolTable->st.find(currId) != symbolTable->st.end()) {
+				cout << "ldc " << capitalize(currId) << endl;
+				nestingDiff = symbolTable->st[currId]->nestingLevel - symbolTable->st[funcName]->nestingLevel;
+			}
+			// regular variable
+			else {
+				nestingDiff = symbolTable->nestingDiff(currId, funcName);
+				varOffset = symbolTable->getVar(currId)->getOffset();
+			}
 		}
 		cout << "lda " << nestingDiff << " " << varOffset << endl;
 	}
