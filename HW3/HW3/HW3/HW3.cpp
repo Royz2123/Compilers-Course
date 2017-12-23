@@ -99,6 +99,8 @@ public:
 		this->byVal = true;
 	}
 
+	virtual void setVar(AST* ast, FuncSymbolTable* fst) { return; }
+
 	void setArgType(bool byVal) {
 		this->byVal = byVal;
 	}
@@ -214,7 +216,7 @@ public:
 	std::string pointedVar;
 
 	Pointer(string vname, string vtype, int voffset, int vsize);
-	void setPointer(AST* ast, FuncSymbolTable* fst);
+	virtual void setVar(AST* ast, FuncSymbolTable* fst);
 };
 
 class Array : public Variable {
@@ -226,7 +228,7 @@ public:
 	vector<pair<int, int>> ranges;
 
 	Array(string vname, string vtype, int voffset, int vsize);
-	void setArray(AST* ast, FuncSymbolTable* fst);
+	virtual void setVar(AST* ast, FuncSymbolTable* fst);
 	void calc_subpart();
 	void setRange(AST* ast, FuncSymbolTable* fst);
 	pair<int, int> getRange(AST* range);
@@ -236,7 +238,7 @@ public:
 class Record : public Variable {
 public:
 	Record(string vname, string vtype, int voffset, int vsize);
-	void setRecord(AST* ast, FuncSymbolTable* fst);
+	virtual void setVar(AST* ast, FuncSymbolTable* fst);
 	void setStructOffsets(AST* ast, FuncSymbolTable* st);
 	void setSize(AST* ast, FuncSymbolTable* st);
 };
@@ -304,7 +306,7 @@ public:
 			|| value == "greaterOrEquals"
 			|| value == "greaterThan"
 			|| value == "equals"
-			|| value == "notEqual"
+			|| value == "notEquals"
 			|| value == "lessThan"
 			|| value == "array"					// TODO: arrays not working properly
 			|| value == "record"
@@ -454,47 +456,17 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 	// handle current node
 	if (Variable::isPrimitive(varType)) {
 		this->st[varName] = new Variable(varName, varType, this->currOffset, 1);
-		this->currOffset++;
-		if (isParm) {
-			this->st[varName]->setArgType(argType);
-			this->parmSize += 1;
-			this->parms.push_back(this->st[varName]);
-		}
 	}
 	else if (varType == "pointer") {
-		Pointer* myPntr = new Pointer(varName, varType, this->currOffset, 1);
-		this->st[varName] = (Variable*)myPntr;
-		myPntr->setPointer(currVar->getRight(), this);
-		this->currOffset++;
-		if (isParm) {
-			this->st[varName]->setArgType(argType);
-			this->parmSize += 1;
-			this->parms.push_back(this->st[varName]);
-		}
+		this->st[varName] = (Variable*)(new Pointer(varName, varType, this->currOffset, 1));
 	}
 	else if (varType == "array") {
 		// create an array and set to size 1 (will change in setArray)
-		Array* myArr = new Array(varName, varType, this->currOffset, 1);
-		this->st[varName] = (Variable*)myArr;
-		myArr->setArray(currVar->getRight(), this);
-		this->currOffset += myArr->getSize();
-		if (isParm) {
-			this->st[varName]->setArgType(argType);
-			this->parmSize += myArr->getSize();
-			this->parms.push_back(this->st[varName]);
-		}
-
+		this->st[varName] = (Variable*)(new Array(varName, varType, this->currOffset, 1));
 	}
 	else if (varType == "record") {
 		// create a record and set to size 0 (will change in setRecord)
-		Record* myRec = new Record(varName, varType, this->currOffset, 0);
-		this->st[varName] = (Variable*)myRec;
-		myRec->setRecord(currVar->getRight(), this);		// currOffset is updated in setRecord
-		if (isParm) {
-			this->st[varName]->setArgType(argType);
-			this->parmSize += myRec->getSize();
-			this->parms.push_back(this->st[varName]);
-		}
+		this->st[varName] = (Variable*)(new Record(varName, varType, this->currOffset, 0));
 	}
 	else if (varType == "identifier") {
 		// identifier type, could be a record or something that has been previously defined
@@ -504,28 +476,34 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 		// check if this variable exists! if so we need to add it and also create a new one
 		// that is identical to it
 		if (myType != NULL) {
-			cout << "NEEDS HANDLING! VARIABLE OF MY TYPE TRIED TO BE CREATED!!!" << endl;
-			
-			// Variable* myVar = new Variable(myType);
+			this->st[varName] = myType;
 		}
 		// check if maybe the identifier is a function, in which case we need to create 
 		// a Function Descriptor
 		else if (this->fatherST->st[identifier] != NULL) {
-			FuncDesc* myFunc = new FuncDesc(varName, identifier, this->currOffset);
-			this->st[varName] = (Variable*)myFunc;
-			this->currOffset += 2;
-			if (isParm) {
-				this->st[varName]->setArgType(argType);
-				this->parmSize += 2;
-				this->parms.push_back(this->st[varName]);
-			}
+			this->st[varName] = (Variable*)(new FuncDesc(varName, identifier, this->currOffset));
 		}
 		else {
 			cout << "Unrecognized identifier" << identifier << endl;
+			return;
 		}
 	}
 	else {
 		cout << "Unrecognized type" << varName << varType << endl;
+		return;
+	}
+
+	// setVar based on Variable*
+	this->st[varName]->setVar(currVar->getRight(), this);
+
+	// add to offset
+	this->currOffset+=this->st[varName]->getSize();
+
+	// if this is a parameter 
+	if (isParm) {
+		this->st[varName]->setArgType(argType);
+		this->parmSize += this->st[varName]->getSize();
+		this->parms.push_back(this->st[varName]);
 	}
 }
 
@@ -653,7 +631,7 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 
 Pointer::Pointer(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
 
-void Pointer::setPointer(AST* ast, FuncSymbolTable* fst) {
+void Pointer::setVar(AST* ast, FuncSymbolTable* fst) {
 	pointedVar = ast->getLeft()->getLeft()->getValue();
 	pointedOffset = fst->st[pointedVar]->getOffset();
 }
@@ -663,7 +641,7 @@ void Pointer::setPointer(AST* ast, FuncSymbolTable* fst) {
 
 Array::Array(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
 
-void Array::setArray(AST* ast, FuncSymbolTable* fst) {
+void Array::setVar(AST* ast, FuncSymbolTable* fst) {
 	string type = ast->getRight()->getValue();
 	string nodeName = "";
 
@@ -728,7 +706,7 @@ int Array::getRangeLength(pair<int, int> range) {
 
 Record::Record(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
 
-void Record::setRecord(AST* ast, FuncSymbolTable* fst) {
+void Record::setVar(AST* ast, FuncSymbolTable* fst) {
 	// first create objects inside the record
 	fst->coded(ast->getLeft());
 
@@ -746,7 +724,6 @@ void Record::setStructOffsets(AST* ast, FuncSymbolTable* st) {
 		st->st[name]->setStructOffset(st->st[name]->getOffset() - this->getOffset());
 		tmp = tmp->getLeft();
 	}
-
 }
 
 void Record::setSize(AST* ast, FuncSymbolTable* st) {
@@ -793,17 +770,19 @@ void codea(AST* ast, SymbolTable* symbolTable, string funcName, string newFunc, 
 	// call recursively on left
 	codea(ast->getLeft(), symbolTable, funcName, newFunc, parmIndex - 1);
 
-	// handle current parameter, check if byVal or byRef
+	// by Value?
 	if (symbolTable->st[newFunc]->parms[parmIndex]->getArgType()) {
-		// parm by value
-		coder(ast->getRight(), symbolTable, funcName);
-
-		// if array call movs
-		// move into stack with movs
-		if (symbolTable->st[newFunc]->parms[parmIndex]->getType() == "array") {
+		// if array call movs or something big 
+		if (symbolTable->st[newFunc]->parms[parmIndex]->getSize() > 1)	{
+			codel(ast->getRight(), symbolTable, funcName);
 			cout << "movs " << symbolTable->st[newFunc]->parms[parmIndex]->getSize() << endl;
 		}
+		// regular passing by Val
+		else {
+			coder(ast->getRight(), symbolTable, funcName);
+		}
 	}
+	// by Reference
 	else {
 		codel(ast->getRight(), symbolTable, funcName);
 	}
@@ -836,30 +815,30 @@ void code(AST* ast, SymbolTable* symbolTable, string funcName) {
 	else if (ast->getValue() == "while") {
 		la = LAB++, lb = LAB++;
 		LAST_WHILE_LAB = lb;
-		cout << "while_" << la << ":" << endl;
+		cout << "L" << la << ":" << endl;
 		coder(ast->getLeft(), symbolTable, funcName);
-		cout << "fjp while_out_" << lb << endl;
+		cout << "fjp L" << lb << endl;
 		code(ast->getRight(), symbolTable, funcName);
-		cout << "ujp while_" << la << endl;
-		cout << "while_out_" << lb << ":" << endl;
+		cout << "ujp L" << la << endl;
+		cout << "L" << lb << ":" << endl;
 	}
 	else if (ast->getValue() == "if") {
 		if (ast->getRight()->getValue() != "else") {
 			la = LAB++;
 			coder(ast->getLeft(), symbolTable, funcName);		// exprssn
-			cout << "fjp skip_if_" << la << endl;
+			cout << "fjp L" << la << endl;
 			code(ast->getRight(), symbolTable, funcName);
-			cout << "skip_if_" << la << ":" << endl;
+			cout << "L" << la << ":" << endl;
 		}
 		else {
 			la = LAB++, lb = LAB++;
 			coder(ast->getLeft(), symbolTable, funcName);		// exprssn
-			cout << "fjp skip_if_" << la << endl;
+			cout << "fjp L" << la << endl;
 			code(ast->getRight()->getLeft(), symbolTable, funcName);
-			cout << "ujp skip_else_" << lb << endl;
-			cout << "skip_if_" << la << ":" << endl;
+			cout << "ujp L" << lb << endl;
+			cout << "L" << la << ":" << endl;
 			code(ast->getRight()->getRight(), symbolTable, funcName);
-			cout << "skip_else_" << lb << ":" << endl;
+			cout << "L" << lb << ":" << endl;
 		}
 	}
 	else if (ast->getValue() == "switch") {
@@ -1185,7 +1164,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree11.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree14.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
