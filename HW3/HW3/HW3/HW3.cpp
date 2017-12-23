@@ -494,11 +494,13 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 		return;
 	}
 
-	// setVar based on Variable*
+	// setVar based on Variable*. Only create variables, otherwise just use them
 	this->st[varName]->setVar(currVar->getRight(), this);
 
-	// add to offset
-	this->currOffset+=this->st[varName]->getSize();
+	// add to offset unlless record in which all the recursive sons do
+	if (varType != "record") {
+		this->currOffset += this->st[varName]->getSize();
+	}
 
 	// if this is a parameter 
 	if (isParm) {
@@ -531,7 +533,6 @@ int SymbolTable::nestingDiff(string varName, int currLevel) {
 	return currLevel - st[baseFunc]->nestingLevel;
 }
 // returns a variable from the tree
-// TODO: look only in functions that the currFunc is nested in
 Variable* SymbolTable::getVar(string name) {
 	std::vector<string>::iterator it;
 	Variable* retVar = NULL;
@@ -550,7 +551,6 @@ Variable* SymbolTable::getVar(string name) {
 // TODO: look only in functions that the currFunc is nested in
 string SymbolTable::getFuncFromVar(string name) {
 	std::vector<string>::iterator it;
-	Variable* retVar = NULL;
 
 	// find variable in one of the functions
 	for (it = funcOrder.begin(); it != funcOrder.end(); it++) {
@@ -774,7 +774,10 @@ void codea(AST* ast, SymbolTable* symbolTable, string funcName, string newFunc, 
 	// by Value?
 	if (symbolTable->st[newFunc]->parms[parmIndex]->getArgType()) {
 		// if array call movs or something big 
-		if (symbolTable->st[newFunc]->parms[parmIndex]->getSize() > 1)	{
+		if (
+			symbolTable->st[newFunc]->parms[parmIndex]->getType() == "array"
+			|| symbolTable->st[newFunc]->parms[parmIndex]->getType() == "record"
+		)	{
 			codel(ast->getRight(), symbolTable, funcName);
 			cout << "movs " << symbolTable->st[newFunc]->parms[parmIndex]->getSize() << endl;
 		}
@@ -1055,7 +1058,7 @@ void coder(AST* ast, SymbolTable* symbolTable, string funcName) {
 			nd = callingLevel - fdLevel;
 
 			// print calling things
- 			cout << "mstf " << nd << endl;													// print mst 
+ 			cout << "mstf " << nd << " " << fd->getOffset() << endl;													// print mst 
 			codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list			
 			cout << "smp " << newFst->parmSize << endl;
 			cout << "cupi " << nd << " " << fd->getOffset() << endl;	// call function
@@ -1165,7 +1168,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree13.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree14.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
