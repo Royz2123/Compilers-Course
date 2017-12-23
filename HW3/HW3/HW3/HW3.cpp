@@ -187,6 +187,7 @@ public:
 class SymbolTable {
 public:
 	map<string, FuncSymbolTable*> st;		// maps between functions and their symbolTable
+	vector<string> funcOrder;
 
 	// finds the differnce for lda functions
 	int nestingDiff(string varName, string currFunc);
@@ -205,8 +206,8 @@ public:
 	// basically traverses along functionLists and calls itself recursively
 	// assumes the first one is a program
 	// TODO: parameters? probably
-	void funcSymbolHandler(AST* ast, SymbolTable* st, int depth);
-	void funcSymbolHelper(AST* ast, SymbolTable* st, int depth);
+	void funcSymbolHandler(AST* ast, int depth);
+	void funcSymbolHelper(AST* ast, int depth);
 	static SymbolTable generateSymbolTable(AST* tree);
 };
 
@@ -532,16 +533,14 @@ int SymbolTable::nestingDiff(string varName, int currLevel) {
 // returns a variable from the tree
 // TODO: look only in functions that the currFunc is nested in
 Variable* SymbolTable::getVar(string name) {
-	std::map<string, FuncSymbolTable*>::iterator it;
+	std::vector<string>::iterator it;
 	Variable* retVar = NULL;
 
 	// find variable in one of the functions
-	for (it = st.begin(); it != st.end(); it++) {
-		if (it->second != NULL){
-			retVar = it->second->getVar(name);
-			if (retVar != NULL) {
-				break;
-			}
+	for (it = funcOrder.begin(); it != funcOrder.end(); it++) {
+		retVar = this->st[*it]->getVar(name);
+		if (retVar != NULL) {
+			break;
 		}
 	}
 	return retVar;
@@ -550,12 +549,13 @@ Variable* SymbolTable::getVar(string name) {
 // returns a function that a variable was defined in
 // TODO: look only in functions that the currFunc is nested in
 string SymbolTable::getFuncFromVar(string name) {
-	std::map<string, FuncSymbolTable*>::iterator it;
+	std::vector<string>::iterator it;
+	Variable* retVar = NULL;
 
 	// find variable in one of the functions
-	for (it = st.begin(); it != st.end(); it++) {
-		if (it->second->getVar(name) != NULL) {
-			return it->first;
+	for (it = funcOrder.begin(); it != funcOrder.end(); it++) {
+		if (this->st[*it]->getVar(name) != NULL) {
+			return *it;
 		}
 	}
 	return NULL;
@@ -574,15 +574,15 @@ FuncSymbolTable* SymbolTable::getFuncTable(string funcName) {
 
 // traverses on left branch for funcSymbolHandler. Used to do in loop but it
 // was wrong way! made problems, always go this way on lists!
-void SymbolTable::funcSymbolHelper(AST* fList, SymbolTable* fatherST, int depth) {
+void SymbolTable::funcSymbolHelper(AST* fList, int depth) {
 	if (fList == NULL) {
 		return;
 	}
 	// go left first on the functions list (so they all know each other)
-	this->funcSymbolHelper(fList->getLeft(), fatherST, depth);
+	this->funcSymbolHelper(fList->getLeft(), depth);
 
 	// handle this function now that all the left ones have been hadnled
-	this->funcSymbolHandler(fList->getRight(), fatherST, depth + 1);
+	this->funcSymbolHandler(fList->getRight(), depth + 1);
 }
 
 
@@ -590,7 +590,7 @@ void SymbolTable::funcSymbolHelper(AST* fList, SymbolTable* fatherST, int depth)
 // basically traverses along functionLists and calls itself recursively
 // assumes the first one is a program
 // TODO: parameters? probably
-void SymbolTable::funcSymbolHandler(AST* ast, SymbolTable* fatherST, int depth) {
+void SymbolTable::funcSymbolHandler(AST* ast, int depth) {
 	if (ast == NULL) {
 		return;
 	}
@@ -606,7 +606,8 @@ void SymbolTable::funcSymbolHandler(AST* ast, SymbolTable* fatherST, int depth) 
 
 	// 1) Obviously first time we are here. Create a FuncSybolTable:
 	// Note: that function calls coded and codep!
-	st[funcName] = FuncSymbolTable::generateFuncSymbolTable(ast, fatherST, depth);
+	this->st[funcName] = FuncSymbolTable::generateFuncSymbolTable(ast, this, depth);
+	this->funcOrder.push_back(funcName);
 
 	// 2) call recursively on fList
 	AST* scope = ast->getRight()->getLeft();
@@ -617,12 +618,12 @@ void SymbolTable::funcSymbolHandler(AST* ast, SymbolTable* fatherST, int depth) 
 	}
 
 	// travers on fList. depth is changed while traversing on list
-	funcSymbolHelper(scope->getRight(), fatherST, depth);
+	funcSymbolHelper(scope->getRight(), depth);
 }
 
 SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 	SymbolTable newSt = SymbolTable();
-	newSt.funcSymbolHandler(tree, &newSt, 1);		// call from depth 1
+	newSt.funcSymbolHandler(tree, 1);		// call from depth 1
 	return newSt;
 }
 
@@ -1164,7 +1165,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree14.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree13.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
