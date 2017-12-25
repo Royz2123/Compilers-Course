@@ -266,7 +266,7 @@ public:
 	void setSize(AST* ast, FuncSymbolTable* st);
 };
 
-// for now identical to regular variable, with size = 2 
+// for now identical to regular variable, with size = 2
 // maybe in future will have purpose
 class FuncDesc : public Variable {
 public:
@@ -278,9 +278,8 @@ class SEPCalculator {
 public:
 	AST* root;			// root from where calculating starts
 	SymbolTable* st;
-	int currSS;
 
-	SEPCalculator(AST* vroot, SymbolTable* vst) { this->root = vroot; this->st = vst; this->currSS = 0; }
+	SEPCalculator(AST* vroot, SymbolTable* vst) { this->root = vroot; this->st = vst; }
 
 	int calcSEP() {
 		return recCalc(this->root);
@@ -334,7 +333,7 @@ public:
 			|| value == "equals"
 			|| value == "notEquals"
 			|| value == "lessThan"
-			|| value == "array"					
+			|| value == "array"
 			|| value == "assignment"
 			) {
 			return MAX(recCalc(node->getLeft()), 1 + recCalc(node->getRight()));
@@ -400,6 +399,7 @@ FuncSymbolTable::FuncSymbolTable(int voffset, int vnestingLevel, AST* vroot, Sym
 	this->funcRoot = vroot;
 	this->parms = vector<Variable*>();
 	this->fatherST = vst;
+	this->parmSize = 0;
 }
 
 Variable* FuncSymbolTable::getVar(string name) {
@@ -520,7 +520,7 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 		// identifier type, something that has been previously defined
 		string identifier = currVar->getRight()->getLeft()->getValue();
 		myVar = this->fatherST->getVar(identifier);
-		
+
 		// find root of the variable
 		AST* varRoot = currVar->getRight();
 		if (isParm && !byVal) {
@@ -555,7 +555,7 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 		this->st[varName]->setVar(this);
 	}
 
-	// if this is a parameter, put necessary things 
+	// if this is a parameter, put necessary things
 	if (isParm) {
 		if (!byVal) {
 			this->st[varName]->setSize(1);
@@ -672,7 +672,7 @@ void SymbolTable::funcSymbolHandler(AST* ast, int depth) {
 		return;
 	}
 
-	// current node is an unempty function. 
+	// current node is an unempty function.
 	// Do 2 things:
 	// 1) create a FuncSymbolTable from it
 	// 2) do the same recursively on the fList
@@ -756,7 +756,7 @@ void Array::setVar(FuncSymbolTable* fst) {
 	dim = ranges.size();
 	size *= typeSize;
 
-	// calculate subpartáíâ÷
+	// calculate subpart???÷
 	calc_subpart();
 }
 
@@ -884,7 +884,7 @@ void codea(AST* ast, SymbolTable* symbolTable, string funcName, string newFunc, 
 
 	// by Value?
 	if (symbolTable->st[newFunc]->parms[parmIndex]->getArgType()) {
-		// if array call movs or something big 
+		// if array call movs or something big
 		if (
 			symbolTable->st[newFunc]->parms[parmIndex]->getType() == "array"
 			|| symbolTable->st[newFunc]->parms[parmIndex]->getType() == "record"
@@ -917,7 +917,7 @@ void code(AST* ast, SymbolTable* symbolTable, string funcName) {
 	// get current statement
 	ast = ast->getRight();
 
-	// handle statement type	
+	// handle statement type
 	if (ast->getValue() == "assignment") {
 		codel(ast->getLeft(), symbolTable, funcName);
 		coder(ast->getRight(), symbolTable, funcName);
@@ -1039,7 +1039,7 @@ void funcHandler(AST* ast, SymbolTable* st)
 	}
 }
 
-// Gets the AST of the given index 
+// Gets the AST of the given index
 AST* getRangeAST(AST* currNode, int index) {
 	if (index == 0) {
 		return currNode;
@@ -1159,7 +1159,7 @@ void coder(AST* ast, SymbolTable* symbolTable, string funcName) {
 		FuncSymbolTable* newFst = symbolTable->getFuncTable(newFunc);
 
 		int callingLevel = symbolTable->st[funcName]->nestingLevel + 1;		// calling level is at funcLevel + 1, statemtnList is one down
-		int nd = 0;  
+		int nd = 0;
 
 		// check if maybe we are dealing with a descriptor
 		if (newFst == NULL) {
@@ -1173,19 +1173,19 @@ void coder(AST* ast, SymbolTable* symbolTable, string funcName) {
 			nd = callingLevel - fdLevel;
 
 			// print calling things
- 			cout << "mstf " << nd << " " << fd->getOffset() << endl;													// print mst 
-			codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list			
+ 			cout << "mstf " << nd << " " << fd->getOffset() << endl;													// print mst
+			codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list
 			cout << "smp " << newFst->parmSize << endl;
 			cout << "cupi " << nd << " " << fd->getOffset() << endl;	// call function
 		}
 
-		// regular function call, name is correct 
+		// regular function call, name is correct
 		else {
 			nd = callingLevel - symbolTable->st[newFunc]->nestingLevel;
-			
+
 			// print calling things
-			cout << "mst " << nd << endl;												// print mst 
-			codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list			
+			cout << "mst " << nd << endl;												// print mst
+			codea(ast->getRight(), symbolTable, funcName, newFunc, newFst->parms.size() - 1);	// handle argument list
 			cout << "cup " << newFst->parmSize << " " << capitalize(newFunc) << endl;	// call function
 		}
 	}
@@ -1217,7 +1217,7 @@ string codel(AST* ast, SymbolTable* symbolTable, string funcName) {
 			}
 		}
 		cout << "lda " << nestingDiff << " " << varOffset << endl;
-	
+
 		// check if by reference, if so add an ind
 		if (fst->st[currId] != NULL && !fst->st[currId]->byVal) {
 			cout << "ind" << endl;
@@ -1289,7 +1289,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW2/HW2/TestsHW2/tree8.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/tests/test3/tree13.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
