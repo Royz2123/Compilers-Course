@@ -756,7 +756,7 @@ void Array::setVar(FuncSymbolTable* fst) {
 	dim = ranges.size();
 	size *= typeSize;
 
-	// calculate subpart???÷
+	// calculate subpart???×§
 	calc_subpart();
 }
 
