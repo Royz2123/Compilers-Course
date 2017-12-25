@@ -1,0 +1,52 @@
+program h;
+    var
+        i : int;
+    func g(n : int) : real
+    var
+        i : int;
+
+        func f(m : int) : real
+        var
+            j : int;
+
+            func p(l : int) : bool
+            var
+                k : int;
+            begin
+                k = 2;
+                while (k*k <= l) and (l != (l/k)*k) {
+                    k = k + 1
+                };
+                p = (k*k > l) and (l != 4) and (l != 1)
+            end
+        begin
+            j = 2;
+            f = m;
+            while j <= m/2 {
+                if p(j) and (m == (m/j)*j) {
+                    f = f * (1 - 1.0/j)
+                };
+                j = j + 1
+            };
+            if p(m) {
+                f = f * (1 - 1.0/m)
+            }
+        end
+    begin
+        g = f(n);
+        i = 1;
+        while i <= n/2 {
+            if n == (n/i)*i {
+                g = g + f(i)
+            };
+            i = i+1
+        }
+    end
+begin
+    i = 1;
+    while i <= 13 {
+        print g(i);
+        i = i + 1
+    }
+end
+

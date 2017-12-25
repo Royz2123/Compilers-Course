@@ -1,0 +1,23 @@
+program p;
+var
+    r : record
+        q : record
+            a : int;
+            b : int;
+            c : int;
+        end;
+    end;
+    t : ^r;
+
+    proc f(var x : r, var y : ^r, z : r)
+    begin
+        print x.q.a + y^.q.b + z.q.c
+    end
+begin
+        r.q.a = 8;
+        r.q.b = 4;
+        r.q.c = 4;
+        t = 5;
+        f(r, t, r)
+end
+

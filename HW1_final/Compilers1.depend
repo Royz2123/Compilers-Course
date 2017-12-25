@@ -1,8 +1,0 @@
-# depslib dependency file v1.0
-1511250173 source:c:\users\royz\desktop\compilers1\hw1.cpp
-	<iostream>
-	<string>
-	<fstream>
-	<vector>
-	<algorithm>
-
