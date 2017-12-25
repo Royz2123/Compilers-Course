@@ -1,3 +1,0 @@
-ldc 5
-ldc 5
-sto

@@ -1,5 +1,0 @@
-false
-false
-true
--5.5
-5.5

@@ -1,4 +1,0 @@
-program p;
-begin
-   print 5 
-end
