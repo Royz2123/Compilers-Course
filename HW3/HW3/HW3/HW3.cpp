@@ -86,20 +86,34 @@ protected:
 	int offset;			// offset of variable in function
 	int size;
 	int structOffset = 0;
-	bool byVal;
 
 public:
+	bool isParm;
+	bool byVal;
+	Variable* ref;
+	AST* varRoot;
 	int nestingLevel;
+	bool isRoot;
 
-	Variable(string vname, string vtype, int voffset, int vsize) {
+	Variable(string vname, string vtype, int voffset, int vsize, AST* varRoot) {
 		this->name = vname;
 		this->type = vtype;
 		this->offset = voffset;
 		this->size = vsize;
 		this->byVal = true;
+		this->varRoot = varRoot;
+		this->isParm = false;
+		this->isRoot = true;
 	}
 
-	virtual void setVar(AST* ast, FuncSymbolTable* fst) { return; }
+	virtual void setVar(FuncSymbolTable* fst) { return; }
+
+	virtual Variable* makeCopy(FuncSymbolTable* st, int newOffset) {
+		Variable* newVar = new Variable(
+			this->name, this->type, newOffset, this->size, this->varRoot
+		);
+		return newVar;
+	}
 
 	void setArgType(bool byVal) {
 		this->byVal = byVal;
@@ -142,6 +156,10 @@ public:
 		}
 	}
 
+	void setSize(int vsize) {
+		this->size = vsize;
+	}
+
 	string getType() {
 		return this->type;
 	}
@@ -175,6 +193,7 @@ public:
 
 	// parmList handler
 	void codep(AST* ast);
+	void codepHelper(AST* ast);
 
 	// declerationsList handler. basically handles it and updates
 	// FuncSymbolTable with all of the variables.
@@ -213,11 +232,11 @@ public:
 
 class Pointer : public Variable {
 public:
-	int pointedOffset;
-	std::string pointedVar;
+	string pointedVar;
 
-	Pointer(string vname, string vtype, int voffset, int vsize);
-	virtual void setVar(AST* ast, FuncSymbolTable* fst);
+	Pointer(string vname, string vtype, int voffset, int vsize, AST* varRoot);
+	virtual Variable* makeCopy(FuncSymbolTable* st, int newOffset);
+	virtual void setVar(FuncSymbolTable* fst);
 };
 
 class Array : public Variable {
@@ -228,8 +247,9 @@ public:
 	string var;
 	vector<pair<int, int>> ranges;
 
-	Array(string vname, string vtype, int voffset, int vsize);
-	virtual void setVar(AST* ast, FuncSymbolTable* fst);
+	Array(string vname, string vtype, int voffset, int vsize, AST* varRoot);
+	virtual Variable* makeCopy(FuncSymbolTable* st, int newOffset);
+	virtual void setVar(FuncSymbolTable* fst);
 	void calc_subpart();
 	void setRange(AST* ast, FuncSymbolTable* fst);
 	pair<int, int> getRange(AST* range);
@@ -238,8 +258,9 @@ public:
 
 class Record : public Variable {
 public:
-	Record(string vname, string vtype, int voffset, int vsize);
-	virtual void setVar(AST* ast, FuncSymbolTable* fst);
+	Record(string vname, string vtype, int voffset, int vsize, AST* varRoot);
+	virtual Variable* makeCopy(FuncSymbolTable* st, int newOffset);
+	virtual void setVar(FuncSymbolTable* fst);
 	void setStructOffsets(AST* ast, FuncSymbolTable* st);
 	void setSize(AST* ast, FuncSymbolTable* st);
 };
@@ -248,7 +269,8 @@ public:
 // maybe in future will have purpose
 class FuncDesc : public Variable {
 public:
-	FuncDesc(string vname, string vtype, int voffset);		
+	FuncDesc(string vname, string vtype, int voffset, AST* varRoot);
+	virtual Variable* makeCopy(FuncSymbolTable* st, int newOffset);
 };
 
 class SEPCalculator {
@@ -320,6 +342,7 @@ public:
 			value == "not"
 			|| value == "neg"
 			|| value == "print"
+			|| value == "pointer"
 			) {
 			return recCalc(node->getLeft());
 		}
@@ -419,7 +442,6 @@ int FuncSymbolTable::calcSEP(SymbolTable* st) {
 	return sepVal;
 }
 
-// TODO: parmList handler. Watch out for by value shit
 void FuncSymbolTable::codep(AST* ast)
 {
 	if (ast == NULL)
@@ -431,6 +453,23 @@ void FuncSymbolTable::codep(AST* ast)
 
 	// Handle current parameter
 	this->handleVarNode(ast->getRight(), true);
+}
+
+
+// TODO: parmList handler. Watch out for by value shit
+void FuncSymbolTable::codepHelper(AST* ast)
+{
+	if (ast == NULL)
+		return;
+
+	// Call recursively on left side, parms are created this way
+	// This node is a parmList
+	this->codepHelper(ast->getLeft());
+
+	// Handle current parameter (just add to parms and update size)
+	string varName = ast->getRight()->getLeft()->getLeft()->getValue();
+	this->parmSize += this->st[varName]->getSize();
+	this->parms.push_back(this->st[varName]);
 }
 
 // declerationsList handler. basically handles it and updates
@@ -446,43 +485,55 @@ void FuncSymbolTable::coded(AST* ast) {
 	this->handleVarNode(ast->getRight(), false);
 }
 
+
 // handle current node (add to symbolTable). node is currently var or byValue
 void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
+	Variable* myVar = NULL;
+
+	// current variable
 	string varName = currVar->getLeft()->getLeft()->getValue();
 	string varType = currVar->getRight()->getValue();
 
 	// Check if by Val or by Reference for parms
-	bool argType = (isParm && currVar->getValue() == "byReference") ? false : true;
+	bool byVal = (isParm && currVar->getValue() == "byReference") ? false : true;
 
+
+	// if by reference, just fnid the reference and add
 	// handle current node
 	if (Variable::isPrimitive(varType)) {
-		this->st[varName] = new Variable(varName, varType, this->currOffset, 1);
+		this->st[varName] = new Variable(varName, varType, this->currOffset, 1, currVar->getRight());
 	}
 	else if (varType == "pointer") {
-		this->st[varName] = (Variable*)(new Pointer(varName, varType, this->currOffset, 1));
+		this->st[varName] = (Variable*)(new Pointer(varName, varType, this->currOffset, 1, currVar->getRight()));
 	}
 	else if (varType == "array") {
 		// create an array and set to size 1 (will change in setArray)
-		this->st[varName] = (Variable*)(new Array(varName, varType, this->currOffset, 1));
+		this->st[varName] = (Variable*)(new Array(varName, varType, this->currOffset, 1, currVar->getRight()));
 	}
 	else if (varType == "record") {
 		// create a record and set to size 0 (will change in setRecord)
-		this->st[varName] = (Variable*)(new Record(varName, varType, this->currOffset, 0));
+		this->st[varName] = (Variable*)(new Record(varName, varType, this->currOffset, 0, currVar->getRight()));
 	}
 	else if (varType == "identifier") {
-		// identifier type, could be a record or something that has been previously defined
+		// identifier type, something that has been previously defined
 		string identifier = currVar->getRight()->getLeft()->getValue();
-		Variable* myType = this->fatherST->getVar(identifier);
-
-		// check if this variable exists! if so we need to add it and also create a new one
-		// that is identical to it
-		if (myType != NULL) {
-			this->st[varName] = myType;
+		myVar = this->fatherST->getVar(identifier);
+		
+		// find root of the variable
+		AST* varRoot = currVar->getRight();
+		if (isParm && !byVal) {
+			varRoot = myVar->varRoot;
 		}
-		// check if maybe the identifier is a function, in which case we need to create 
-		// a Function Descriptor
+
+		// check if this variable exists:
+		// if so we need to create a new one that is identical to it
+		if (myVar != NULL) {
+			this->st[varName] = myVar->makeCopy(this, this->currOffset);
+		}
+		// check if maybe the identifier is a function:
+		// if so we need to create a Function Descriptor
 		else if (this->fatherST->st[identifier] != NULL) {
-			this->st[varName] = (Variable*)(new FuncDesc(varName, identifier, this->currOffset));
+			this->st[varName] = (Variable*)(new FuncDesc(varName, identifier, this->currOffset, varRoot));
 		}
 		else {
 			cout << "Unrecognized identifier" << identifier << endl;
@@ -494,26 +545,34 @@ void FuncSymbolTable::handleVarNode(AST* currVar, bool isParm) {
 		return;
 	}
 
-	// setVar based on Variable*. Only create variables, otherwise just use them
-	this->st[varName]->setVar(currVar->getRight(), this);
+	// if this is a parameter - declare it as one:
+	this->st[varName]->isParm = isParm;
 
-	// add to offset unlless record in which all the recursive sons do
-	if (varType != "record") {
-		this->currOffset += this->st[varName]->getSize();
+	// setVar based on Variable* - only create for byValues
+	if (byVal) {
+		this->st[varName]->setVar(this);
 	}
 
-	// if this is a parameter 
+	// if this is a parameter, put necessary things 
 	if (isParm) {
-		this->st[varName]->setArgType(argType);
-		this->parmSize += this->st[varName]->getSize();
-		this->parms.push_back(this->st[varName]);
+		if (!byVal) {
+			this->st[varName]->setSize(1);
+			this->st[varName]->ref = myVar;
+		}
+		this->st[varName]->setArgType(byVal);
+	}
+
+	// add to offset unless its a byValue record in which all the recursive sons do
+	if (!(varType == "record" && byVal)) {
+		this->currOffset += this->st[varName]->getSize();
 	}
 }
 
 // Gets a tree that has either prog/func/proc and create a symbol table from it
 FuncSymbolTable* FuncSymbolTable::generateFuncSymbolTable(AST* tree, SymbolTable* symbolTable, int nestingLevel) {
 	FuncSymbolTable* ST = new FuncSymbolTable(5, nestingLevel, tree, symbolTable);
-	ST->codep(tree->getLeft()->getRight()->getLeft());				// TODO: Add local parameters to symbolTable
+	ST->codep(tree->getLeft()->getRight()->getLeft());				// Add local parameters to symbolTable
+	ST->codepHelper(tree->getLeft()->getRight()->getLeft());
 
 	if (tree->getRight()->getLeft() != NULL) {
 		ST->coded(tree->getRight()->getLeft()->getLeft());			// Add local variable to symbolTable
@@ -630,20 +689,35 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 
 // Pointer implementation
 
-Pointer::Pointer(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
+Pointer::Pointer(string vname, string vtype, int voffset, int vsize, AST* varRoot) : Variable(vname, vtype, voffset, vsize, varRoot) {
+	this->pointedVar = this->varRoot->getLeft()->getLeft()->getValue();
+}
 
-void Pointer::setVar(AST* ast, FuncSymbolTable* fst) {
-	pointedVar = ast->getLeft()->getLeft()->getValue();
-	pointedOffset = fst->st[pointedVar]->getOffset();
+Variable* Pointer::makeCopy(FuncSymbolTable* st, int newOffset) {
+	Pointer* newVar = new Pointer(
+		this->name, this->type, newOffset, 1, this->varRoot
+	);
+	return (Variable*)newVar;
+}
+
+void Pointer::setVar(FuncSymbolTable* fst) {
+	pointedVar = this->varRoot->getLeft()->getLeft()->getValue();
 }
 
 
 // Array Implementation
 
-Array::Array(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
+Array::Array(string vname, string vtype, int voffset, int vsize, AST* varRoot) : Variable(vname, vtype, voffset, vsize, varRoot) {}
 
-void Array::setVar(AST* ast, FuncSymbolTable* fst) {
-	string type = ast->getRight()->getValue();
+Variable* Array::makeCopy(FuncSymbolTable* st, int newOffset) {
+	Array* newVar = new Array(
+		this->name, this->type, newOffset, 1, varRoot
+	);
+	return (Variable*)newVar;
+}
+
+void Array::setVar(FuncSymbolTable* fst) {
+	string type = this->varRoot->getRight()->getValue();
 	string nodeName = "";
 
 	// find typeSize
@@ -652,13 +726,13 @@ void Array::setVar(AST* ast, FuncSymbolTable* fst) {
 		var = name;
 	}
 	else {
-		nodeName = ast->getRight()->getLeft()->getValue();
+		nodeName = this->varRoot->getRight()->getLeft()->getValue();
 		typeSize = fst->st[nodeName]->getSize();
 		var = nodeName;
 	}
 
 	// find dims. go all left then recurse
-	setRange(ast->getLeft(), fst);
+	setRange(this->varRoot->getLeft(), fst);
 
 	// find size and dimensions
 	dim = ranges.size();
@@ -705,17 +779,30 @@ int Array::getRangeLength(pair<int, int> range) {
 
 // Record Implementation
 
-Record::Record(string vname, string vtype, int voffset, int vsize) : Variable(vname, vtype, voffset, vsize) {}
+Record::Record(string vname, string vtype, int voffset, int vsize, AST* varRoot) : Variable(vname, vtype, voffset, vsize, varRoot) {}
 
-void Record::setVar(AST* ast, FuncSymbolTable* fst) {
-	// first create objects inside the record
-	fst->coded(ast->getLeft());
+Variable* Record::makeCopy(FuncSymbolTable* st, int newOffset) {
+	Record* newVar = new Record(
+		this->name, this->type, newOffset, 0, varRoot
+	);
+	return (Variable*)newVar;
+}
+
+
+void Record::setVar(FuncSymbolTable* fst) {
+	// first create objects inside the record (codep / coded)
+	if (this->isParm) {
+		fst->codep(this->varRoot->getLeft());
+	}
+	else {
+		fst->coded(this->varRoot->getLeft());
+	}
 
 	// find size by going thorugh the left branch
-	setSize(ast->getLeft(), fst);
+	setSize(this->varRoot->getLeft(), fst);
 
 	// set indexes of all variables in record
-	setStructOffsets(ast->getLeft(), fst);
+	setStructOffsets(this->varRoot->getLeft(), fst);
 }
 
 void Record::setStructOffsets(AST* ast, FuncSymbolTable* st) {
@@ -748,8 +835,14 @@ void Record::setSize(AST* ast, FuncSymbolTable* st) {
 
 // FuncDesc Implementation
 
-FuncDesc::FuncDesc(string vname, string vtype, int voffset) : Variable(vname, vtype, voffset, 2) {}
+FuncDesc::FuncDesc(string vname, string vtype, int voffset, AST* varRoot) : Variable(vname, vtype, voffset, 2, varRoot) {}
 
+Variable* FuncDesc::makeCopy(FuncSymbolTable* st, int newOffset) {
+	FuncDesc* newVar = new FuncDesc(
+		this->name, this->type, newOffset, varRoot
+	);
+	return (Variable*)newVar;
+}
 
 
 // FUNCTION DEFINITIONS
@@ -1168,7 +1261,7 @@ void generatePCode(AST* ast, SymbolTable symbolTable) {
 int main()
 {
 	AST* ast;
-	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree14.txt");
+	ifstream myfile("C:/Users/Royz/Desktop/University/Compilers-Course/HW3/test 3/tree15.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
