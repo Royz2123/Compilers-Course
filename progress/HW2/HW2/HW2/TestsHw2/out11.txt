@@ -1,0 +1,22 @@
+ldc 5
+ldc 1
+sto
+while_0:
+ldc 5
+ind
+ldc 0
+or
+ldc 2
+ldc 5
+les
+and
+fjp while_out_1
+ldc 1
+print
+ujp while_out_1
+ldc 2
+print
+ujp while_0
+while_out_1:
+ldc 3
+print

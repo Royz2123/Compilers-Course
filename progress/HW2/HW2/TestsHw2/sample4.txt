@@ -1,0 +1,24 @@
+program a;
+var
+    a : int;
+    b : int;
+begin
+    a = 1;
+    b = 1;
+    switch a {
+        case 1 { 
+            print 0
+        } case 2 {
+            print 1
+        } case 3 {
+            print 2;
+            print 3
+        }
+    };
+    switch b {
+        case 1 {
+            print 4
+        }
+    }
+end
+

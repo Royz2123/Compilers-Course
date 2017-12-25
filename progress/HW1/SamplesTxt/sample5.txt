@@ -1,0 +1,12 @@
+program p;
+var
+    a : real;
+    c : int;
+    b : bool;
+begin
+    a = 5.0;
+    b = a < 6.0;
+    if b {
+        print 6
+    }
+end

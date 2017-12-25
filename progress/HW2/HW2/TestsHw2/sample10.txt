@@ -1,0 +1,19 @@
+program p;
+var
+    a : array [1..2] of int;
+    b : array [1..2] of a;
+    i : int;
+    j : int;
+begin
+    i = 1;
+    while (i <= 2) {
+        j = 1;
+        while (j <= 2) {
+            b[i][j] = i*50+j*20;
+            j = j + 1
+        };
+        i = i + 1
+    };
+    print b[1][1]+b[2][2]
+end
+

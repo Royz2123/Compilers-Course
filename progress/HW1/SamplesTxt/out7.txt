@@ -1,0 +1,20 @@
+ldc 5
+ldc 1
+sto
+L0:
+ldc 5
+ind
+ldc 10
+les
+fjp L1
+ldc 5
+ind
+print
+ldc 5
+ldc 5
+ind
+ldc 1
+add
+sto
+ujp L0
+L1:

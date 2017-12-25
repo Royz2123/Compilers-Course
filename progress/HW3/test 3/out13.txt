@@ -1,0 +1,217 @@
+H:
+ssp 6
+sep 6
+ujp H_begin
+G:
+ssp 7
+sep 8
+ujp G_begin
+F:
+ssp 7
+sep 6
+ujp F_begin
+P:
+ssp 7
+sep 4
+ujp P_begin
+P_begin:
+lda 0 6
+ldc 2
+sto
+L0:
+lda 0 6
+ind
+lda 0 6
+ind
+mul
+lda 0 5
+ind
+leq
+lda 0 5
+ind
+lda 0 5
+ind
+lda 0 6
+ind
+div
+lda 0 6
+ind
+mul
+neq
+and
+fjp L1
+lda 0 6
+lda 0 6
+ind
+ldc 1
+add
+sto
+ujp L0
+L1:
+lda 0 0
+lda 0 6
+ind
+lda 0 6
+ind
+mul
+lda 0 5
+ind
+grt
+lda 0 5
+ind
+ldc 4
+neq
+and
+lda 0 5
+ind
+ldc 1
+neq
+and
+sto
+retf
+F_begin:
+lda 0 6
+ldc 2
+sto
+lda 0 0
+lda 0 5
+ind
+sto
+L2:
+lda 0 6
+ind
+lda 0 5
+ind
+ldc 2
+div
+leq
+fjp L3
+mst 0
+lda 0 6
+ind
+cup 1 P
+lda 0 5
+ind
+lda 0 5
+ind
+lda 0 6
+ind
+div
+lda 0 6
+ind
+mul
+equ
+and
+fjp L4
+lda 0 0
+lda 0 0
+ind
+ldc 1
+ldc 1.000000
+lda 0 6
+ind
+div
+sub
+mul
+sto
+L4:
+lda 0 6
+lda 0 6
+ind
+ldc 1
+add
+sto
+ujp L2
+L3:
+mst 0
+lda 0 5
+ind
+cup 1 P
+fjp L5
+lda 0 0
+lda 0 0
+ind
+ldc 1
+ldc 1.000000
+lda 0 5
+ind
+div
+sub
+mul
+sto
+L5:
+retf
+G_begin:
+lda 0 0
+mst 0
+lda 0 5
+ind
+cup 1 F
+sto
+lda 0 6
+ldc 1
+sto
+L6:
+lda 0 6
+ind
+lda 0 5
+ind
+ldc 2
+div
+leq
+fjp L7
+lda 0 5
+ind
+lda 0 5
+ind
+lda 0 6
+ind
+div
+lda 0 6
+ind
+mul
+equ
+fjp L8
+lda 0 0
+lda 0 0
+ind
+mst 0
+lda 0 6
+ind
+cup 1 F
+add
+sto
+L8:
+lda 0 6
+lda 0 6
+ind
+ldc 1
+add
+sto
+ujp L6
+L7:
+retf
+H_begin:
+lda 0 5
+ldc 1
+sto
+L9:
+lda 0 5
+ind
+ldc 13
+leq
+fjp L10
+mst 0
+lda 0 5
+ind
+cup 1 G
+print
+lda 0 5
+lda 0 5
+ind
+ldc 1
+add
+sto
+ujp L9
+L10:
+stp

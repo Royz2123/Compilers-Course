@@ -1,0 +1,20 @@
+program p;
+var
+    a : record
+        i : int;
+        b : record
+            c : ^a;
+            d : record
+                e : array [1..20] of c;
+            end;
+        end;
+    end;
+begin
+    a.i = 1;
+    while (a.i <= 20) {
+        a.b.d.e[a.i] = a.i;
+        a.i = a.i + 1
+    };
+    print a.b.d.e[5]^.b.d.e[5]
+end
+

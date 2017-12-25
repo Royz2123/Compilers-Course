@@ -1,0 +1,13 @@
+program a;
+var
+    a : array [1..10, 5..8] of int;
+    b : array [10..20] of int;
+    i : int;
+begin
+    a[10, 7] = 12;
+    i = 10;
+    b[17] = 7;
+    a[6, 7] = a[i, b[17]];
+    print a[6, 7]
+end
+

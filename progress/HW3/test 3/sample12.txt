@@ -1,0 +1,15 @@
+program p;
+
+func f(n : int) : int
+begin
+    if n < 2 {
+        f = n
+    } else {
+        f = f(n-1) + f(n-2)
+    }
+end
+
+begin
+    print f(7)
+end
+

@@ -1,0 +1,13 @@
+program p;
+var
+    a : bool;
+begin
+    a = true;
+    while ((a or false) and (2 < 5)){
+        print 1;
+        break;
+        print 2
+    };
+    print 3
+end
+

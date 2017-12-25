@@ -1,0 +1,13 @@
+program p;
+var
+    a : array [1..6] of int;
+
+    proc f(b : array[0..5] of int)
+    begin
+        print b[5]
+    end
+begin
+    a[6] = 12;
+    f(a)
+end
+

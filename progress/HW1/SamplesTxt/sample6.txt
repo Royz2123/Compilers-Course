@@ -1,0 +1,12 @@
+program p;
+var
+    a : real;
+begin
+    a = 5.5;
+    print not true;
+    print (((a < 6.0) or (a > 7.0)) and (a == 6.0)) or false;
+    print (((a <= 6.0) or (a >= 7.0)) and (a != 6.0)) or true;
+    print -a;
+    print ((a + 6.5) - 6.5) * 6.5 / 6.5
+end
+
